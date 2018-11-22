@@ -81,7 +81,7 @@ def project_geom(input_geom, epsg_code):
 	database.commit()
 
 
-def route_shapes():
+def route_shapes(epsg_code):
 	
 	cursor.execute('DROP TABLE IF EXISTS route_shapes')
 	print 'Dropped route_shapes table.'
@@ -89,60 +89,59 @@ def route_shapes():
 	cursor.execute('CREATE TABLE route_shapes (route_id TEXT, shape_id TEXT);')
 
 	cursor.execute("""
+		SELECT AddGeometryColumn('route_shapes', 'the_geom', """ + str(epsg_code) + """, 'GEOMETRY', 2);
+		""")
+
+	cursor.execute("""
 		INSERT INTO route_shapes
 		SELECT DISTINCT ON (route_id, shape_id)
 			t.route_id,
-			sh.shape_id
+			sh.shape_id,
+			sh.the_geom
 		FROM
 			(SELECT DISTINCT ON (route_id) route_id, trip_id, shape_id FROM gtfs_trips) AS t,
-			gtfs_shapes AS sh
+			gtfs_shape_geoms AS sh
 		WHERE
 			t.shape_id = sh.shape_id
 		ORDER BY
 			route_id;
-	""")
+		""")
 
 	database.commit()
 
 	print 'route_shapes created.'
 	
 
-def shape_catchment(epsg_code):
+def shape_catchments(epsg_code):
 
-	cursor.execute('DROP TABLE IF EXISTS shape_catchment')
-	print 'Dropped shape_catchment table.'
+	cursor.execute('DROP TABLE IF EXISTS shape_catchments')
+	print 'Dropped shape_catchments table.'
 
 	cursor.execute("""
-		CREATE TABLE shape_catchment (route_id TEXT);
+		CREATE TABLE shape_catchments (route_id TEXT);
 		""")
 
 	cursor.execute("""
-		SELECT AddGeometryColumn('shape_catchment', 'catchment', """ + str(epsg_code) + """, 'GEOMETRY', 2);
+		SELECT AddGeometryColumn('shape_catchments', 'the_geom', """ + str(epsg_code) + """, 'GEOMETRY', 2);
 		""")
 
 	cursor.execute("""
-		INSERT INTO shape_catchment
-		(route_id, catchment)
+		INSERT INTO shape_catchments
+		(route_id, the_geom)
 		SELECT
 			rs.route_id,
-			ST_BUFFER(the_geom, 500, 'endcap=round join=round') AS catchment
+			ST_BUFFER(the_geom, 500, 'endcap=round join=round') AS the_geom
 		FROM
-			route_shapes AS rs,
-			gtfs_shape_geoms AS sh
-		WHERE
-			rs.shape_id = sh.shape_id
-		GROUP BY 
-			route_id,
-			sh.the_geom;
+			route_shapes AS rs;
 		""")
 
 	cursor.execute("""
-		CREATE INDEX "shape_catchment_gist" ON "shape_catchment" using gist ("catchment");
+		CREATE INDEX "shape_catchments_gist" ON "shape_catchments" using gist ("the_geom");
 		""")
 	
 	database.commit()
 
-	print 'shape_catchment created.'
+	print 'shape_catchments created.'
 
 
 def catchment_overlap(epsg_code):
@@ -164,13 +163,13 @@ def catchment_overlap(epsg_code):
 		SELECT
 			sc.route_id,
 			sc2.route_id AS route_id2,
-			ST_INTERSECTION(sc.catchment, sc2.catchment) AS overlap
+			ST_INTERSECTION(sc.the_geom, sc2.the_geom) AS overlap
 		FROM
-			shape_catchment AS sc,
-			shape_catchment AS sc2
+			shape_catchments AS sc,
+			shape_catchments AS sc2
 		WHERE
 			sc.route_id != sc2.route_id AND
-			ST_IsEmpty(ST_INTERSECTION(sc.catchment, sc2.catchment)) = FALSE;
+			ST_IsEmpty(ST_INTERSECTION(sc.the_geom, sc2.the_geom)) = FALSE;
 		""")
 
 	cursor.execute("""
@@ -246,18 +245,18 @@ def collinear_index():
 		SELECT
 			co.route_id,
 			co.route_id2,
-			ST_AREA(sc1.catchment),
-			ST_AREA(sc2.catchment),
+			ST_AREA(sc1.the_geom),
+			ST_AREA(sc2.the_geom),
 			ST_AREA(co.overlap),
-			ST_AREA(co.overlap) / ST_AREA(sc1.catchment)
+			ST_AREA(co.overlap) / ST_AREA(sc1.the_geom)
 		FROM
-			shape_catchment AS sc1,
-			shape_catchment AS sc2,
+			shape_catchments AS sc1,
+			shape_catchments AS sc2,
 			catchment_overlap AS co
 		WHERE
 			co.route_id = sc1.route_id AND
 			co.route_id2 = sc2.route_id
-		ORDER BY ST_AREA(co.overlap) / ST_AREA(sc1.catchment) DESC;
+		ORDER BY ST_AREA(co.overlap) / ST_AREA(sc1.the_geom) DESC;
 		""")
 
 	database.commit()
@@ -266,8 +265,8 @@ def collinear_index():
 utm_code = get_utm_code('gtfs_stops')
 project_geom('gtfs_shape_geoms', utm_code)
 project_geom('gtfs_stops', utm_code)
-route_shapes()
-shape_catchment(utm_code)
+route_shapes(utm_code)
+shape_catchments(utm_code)
 catchment_overlap(utm_code)
 # filter_overlap(utm_code)
 collinear_index()

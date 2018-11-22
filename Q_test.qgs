@@ -28,11 +28,11 @@
     <layer-tree-layer checked="Qt::Checked" id="gtfs_shape_geoms_0eda92b3_1a89_4d33_8708_a3d4570a9958" source="dbname='gtfs' host=localhost port=5432 sslmode=disable key='tid' srid=32618 type=LineString table=&quot;public&quot;.&quot;gtfs_shape_geoms&quot; (the_geom) sql=" providerKey="postgres" name="gtfs_shape_geoms" expanded="1">
       <customproperties/>
     </layer-tree-layer>
-    <layer-tree-layer checked="Qt::Checked" id="shape_catchment_ced60443_0e98_4b8f_ba3d_4407212ab057" source="dbname='gtfs' host=localhost port=5432 sslmode=disable key='tid' srid=32618 type=Polygon table=&quot;public&quot;.&quot;shape_catchment&quot; (catchment) sql=" providerKey="postgres" name="shape_catchment" expanded="1">
+    <layer-tree-layer checked="Qt::Checked" id="shape_catchments_ced60443_0e98_4b8f_ba3d_4407212ab057" source="dbname='gtfs' host=localhost port=5432 sslmode=disable key='tid' srid=32618 type=Polygon table=&quot;public&quot;.&quot;shape_catchments&quot; (catchment) sql=" providerKey="postgres" name="shape_catchments" expanded="1">
       <customproperties/>
     </layer-tree-layer>
     <custom-order enabled="0">
-      <item>shape_catchment_ced60443_0e98_4b8f_ba3d_4407212ab057</item>
+      <item>shape_catchments_ced60443_0e98_4b8f_ba3d_4407212ab057</item>
       <item>gtfs_shape_geoms_0eda92b3_1a89_4d33_8708_a3d4570a9958</item>
       <item>gtfs_stops_e2389184_364e_40ed_9bae_1fc148131d47</item>
       <item>catchment_overlap_161ea0ed_a3e4_4b1d_87b9_b31ccb162a33</item>
@@ -41,7 +41,7 @@
   <snapping-settings unit="1" enabled="0" mode="2" type="1" intersection-snapping="0" tolerance="12">
     <individual-layer-settings>
       <layer-setting enabled="0" units="1" id="catchment_overlap_161ea0ed_a3e4_4b1d_87b9_b31ccb162a33" type="1" tolerance="12"/>
-      <layer-setting enabled="0" units="1" id="shape_catchment_ced60443_0e98_4b8f_ba3d_4407212ab057" type="1" tolerance="12"/>
+      <layer-setting enabled="0" units="1" id="shape_catchments_ced60443_0e98_4b8f_ba3d_4407212ab057" type="1" tolerance="12"/>
       <layer-setting enabled="0" units="1" id="gtfs_shape_geoms_0eda92b3_1a89_4d33_8708_a3d4570a9958" type="1" tolerance="12"/>
       <layer-setting enabled="0" units="1" id="gtfs_stops_e2389184_364e_40ed_9bae_1fc148131d47" type="1" tolerance="12"/>
     </individual-layer-settings>
@@ -86,9 +86,9 @@
         <legendlayerfile isInOverview="0" visible="1" layerid="gtfs_shape_geoms_0eda92b3_1a89_4d33_8708_a3d4570a9958"/>
       </filegroup>
     </legendlayer>
-    <legendlayer checked="Qt::Checked" open="true" drawingOrder="-1" showFeatureCount="0" name="shape_catchment">
+    <legendlayer checked="Qt::Checked" open="true" drawingOrder="-1" showFeatureCount="0" name="shape_catchments">
       <filegroup open="true" hidden="false">
-        <legendlayerfile isInOverview="0" visible="1" layerid="shape_catchment_ced60443_0e98_4b8f_ba3d_4407212ab057"/>
+        <legendlayerfile isInOverview="0" visible="1" layerid="shape_catchments_ced60443_0e98_4b8f_ba3d_4407212ab057"/>
       </filegroup>
     </legendlayer>
   </legend>
@@ -736,12 +736,12 @@
         <xmax>609315.625</xmax>
         <ymax>530425.6875</ymax>
       </extent>
-      <id>shape_catchment_ced60443_0e98_4b8f_ba3d_4407212ab057</id>
-      <datasource>dbname='gtfs' host=localhost port=5432 sslmode=disable key='tid' srid=32618 type=Polygon table="public"."shape_catchment" (catchment) sql=</datasource>
+      <id>shape_catchments_ced60443_0e98_4b8f_ba3d_4407212ab057</id>
+      <datasource>dbname='gtfs' host=localhost port=5432 sslmode=disable key='tid' srid=32618 type=Polygon table="public"."shape_catchments" (catchment) sql=</datasource>
       <keywordList>
         <value></value>
       </keywordList>
-      <layername>shape_catchment</layername>
+      <layername>shape_catchments</layername>
       <srs>
         <spatialrefsys>
           <proj4>+proj=utm +zone=18 +datum=WGS84 +units=m +no_defs</proj4>
@@ -869,7 +869,7 @@
     </maplayer>
   </projectlayers>
   <layerorder>
-    <layer id="shape_catchment_ced60443_0e98_4b8f_ba3d_4407212ab057"/>
+    <layer id="shape_catchments_ced60443_0e98_4b8f_ba3d_4407212ab057"/>
     <layer id="gtfs_shape_geoms_0eda92b3_1a89_4d33_8708_a3d4570a9958"/>
     <layer id="gtfs_stops_e2389184_364e_40ed_9bae_1fc148131d47"/>
     <layer id="catchment_overlap_161ea0ed_a3e4_4b1d_87b9_b31ccb162a33"/>

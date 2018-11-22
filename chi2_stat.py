@@ -46,16 +46,16 @@ def stop_catchments(epsg_code):
 	cursor.execute('CREATE TABLE stop_catchments (stop_id TEXT, stop_name TEXT);')
 
 	cursor.execute("""
-		SELECT AddGeometryColumn('stop_catchments', 'catchment', """ + str(epsg_code) + """, 'GEOMETRY', 2);
+		SELECT AddGeometryColumn('stop_catchments', 'the_geom', """ + str(epsg_code) + """, 'GEOMETRY', 2);
 		""")
 
 	cursor.execute("""
 		INSERT INTO stop_catchments
-		(stop_id, stop_name, catchment)
+		(stop_id, stop_name, the_geom)
 		SELECT
 			stop_id,
 			stop_name,
-			ST_BUFFER(the_geom, 500, 'quad_segs=8') AS catchment
+			ST_BUFFER(the_geom, 500, 'quad_segs=8') AS the_geom
 		FROM
 			gtfs_stops;
 		""")
@@ -63,18 +63,23 @@ def stop_catchments(epsg_code):
 	database.commit()
 
 
-def route_stops():
+def route_stops(epsg_code):
 
 	cursor.execute('DROP TABLE IF EXISTS route_stops')
 
 	cursor.execute('CREATE TABLE route_stops (route_id TEXT, stop_id TEXT, stop_sequence INT);')
 
 	cursor.execute("""
+		SELECT AddGeometryColumn('route_stops', 'the_geom', """ + str(epsg_code) + """, 'GEOMETRY', 2);
+		""")
+
+	cursor.execute("""
 		INSERT INTO route_stops
 		SELECT DISTINCT ON (route_id, stop_id)
 			t.route_id,
 			s.stop_id,
-			st.stop_sequence
+			st.stop_sequence,
+			s.the_geom
 		FROM
 			(SELECT DISTINCT ON (route_id) route_id, trip_id FROM gtfs_trips) AS t,
 			gtfs_stops AS s,
@@ -89,6 +94,34 @@ def route_stops():
 	""")
 
 	database.commit()
+
+
+def route_stop_catchments(epsg_code):
+
+	cursor.execute('DROP TABLE IF EXISTS route_stop_catchments')
+
+	cursor.execute('CREATE TABLE route_stop_catchments (route_id TEXT, stop_id TEXT, stop_sequence INT);')
+
+	cursor.execute("""
+		SELECT AddGeometryColumn('route_stop_catchments', 'the_geom', """ + str(epsg_code) + """, 'GEOMETRY', 2);
+		""")
+
+	cursor.execute("""
+		INSERT INTO route_stop_catchments
+		SELECT
+			rs.route_id,
+			rs.stop_id,
+			rs.stop_sequence,
+			sc.the_geom
+		FROM
+			route_stops AS rs,
+			stop_catchments AS sc
+		WHERE
+			rs.stop_id = sc.stop_id;
+		""")
+	
+	database.commit()
+
 
 def stop_demographics(filename):
 
@@ -124,7 +157,7 @@ def stop_demographics(filename):
 		FROM
 			stop_catchments
 			LEFT JOIN """ + filename + """
-			ON ST_Intersects(stop_catchments.catchment, """ + filename + """.the_geom)
+			ON ST_Intersects(stop_catchments.the_geom, """ + filename + """.the_geom)
 		GROUP BY
 			stop_id
 		""")
@@ -252,7 +285,8 @@ def results(filename):
 
 epsg_code = 32616
 stop_catchments(epsg_code)
-route_stops()
+route_stops(epsg_code)
+route_stop_catchments(epsg_code)
 stop_demographics('atl_race_2016')
 route_demographics('atl_race_2016')
 chi2_stat('atl_race_2016')

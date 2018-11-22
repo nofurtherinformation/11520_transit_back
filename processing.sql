@@ -1,9 +1,9 @@
 -- Catchment
-CREATE TABLE IF NOT EXISTS shape_catchment (
+CREATE TABLE IF NOT EXISTS shape_catchments (
   shape_id TEXT
 );
 
-SELECT AddGeometryColumn('shape_catchment', 'catchment', 4326, 'GEOMETRY', 2);
+SELECT AddGeometryColumn('shape_catchments', 'catchment', 4326, 'GEOMETRY', 2);
 
 -- Catchment overlap
 CREATE TABLE IF NOT EXISTS catchment_overlap (

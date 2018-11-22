@@ -16,12 +16,13 @@ cat gtfs_tables.sql \
   gtfs_tables_makespatial.sql \
   gtfs_tables_makeindexes.sql \
 | psql gtfs
-psql gtfs -c "\dt"
+# psql gtfs -c "\dt"
 
 cd $process_path
 python collinear_index.py
 python import_demographics.py
 python chi2_stat.py
+python export_jsons.py
 
 # GeoJSON
 
