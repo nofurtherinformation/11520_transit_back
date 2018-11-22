@@ -176,16 +176,48 @@ def route_demographics(filename):
 
 def chi2_stat(filename):
 
-	cursor.execute('DROP TABLE IF EXISTS route_' + filename)
+	cursor.execute('DROP TABLE IF EXISTS chi2_' + filename)
 
 	cursor.execute("""
-		CREATE TABLE route_""" + filename + """ (
-			route_id TEXT, 
+		CREATE TABLE chi2_""" + filename + """ (
+			route_id TEXT,
+			route_id2 TEXT,
+			chi2 DOUBLE PRECISION,
+			p_val DOUBLE PRECISION);
+		""")
+
+	# 8 - 1 = 7 degrees of freedom => significant at 5% if chi2 over 14.067
+	cursor.execute("""
+		INSERT INTO chi2_""" + filename + """
+		SELECT
+			r1.route_id,
+			r2.route_id AS route_id2,
+			CASE WHEN r1.total = 0 THEN 0 ELSE 
+			COALESCE((r1.am_indian/r1.total - r2.am_indian/r2.total)^2 / (NULLIF(r1.am_indian,0)/r1.total),0) + 
+			COALESCE((r1.asian/r1.total - r2.asian/r2.total)^2 / (NULLIF(r1.asian,0)/r1.total),0) + 
+			COALESCE((r1.black/r1.total - r2.black/r2.total)^2 / (NULLIF(r1.black,0)/r1.total),0) + 
+			COALESCE((r1.latino/r1.total - r2.latino/r2.total)^2 / (NULLIF(r1.latino,0)/r1.total),0) + 
+			COALESCE((r1.pacific/r1.total - r2.pacific/r2.total)^2 / (NULLIF(r1.pacific,0)/r1.total),0) + 
+			COALESCE((r1.white/r1.total - r2.white/r2.total)^2 / (NULLIF(r1.white,0)/r1.total),0) + 
+			COALESCE((r1.mixed/r1.total - r2.mixed/r2.total)^2 / (NULLIF(r1.mixed,0)/r1.total),0) + 
+			COALESCE((r1.other/r1.total - r2.other/r2.total)^2 / (NULLIF(r1.other,0)/r1.total),0)
+			END AS chi2,
+			1 AS p_val
+		FROM
+			route_""" + filename + """ AS r1,
+			route_""" + filename + """ AS r2
+		WHERE
+			r1.route_id != r2.route_id
+		ORDER BY
+			chi2 DESC;
+		""")
+
+	database.commit()
+
 
 epsg_code = 32616
 stop_catchments(epsg_code)
 route_stops()
 stop_demographics('atl_race_2016')
 route_demographics('atl_race_2016')
-
-
+chi2_stat('atl_race_2016')
