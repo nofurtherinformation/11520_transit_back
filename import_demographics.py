@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 '''
 --------------------------------
-- Calculate Parallelism Index
+- Import Demographic Data
 --------------------------------
 '''
 # libraries
@@ -10,7 +10,7 @@ import time
 import sys
 import math
 import utm
-import osgeo.ogr
+# import osgeo.ogr
 # local
 # from project_to_utm import get_utm_code, project_geom
 
@@ -82,39 +82,49 @@ def project_geom(input_geom, epsg_code):
 	database.commit()
 
 
-def pop_shape_catchment(epsg_code):
+def import_demographics_csv(filename, epsg_code):
 
-	cursor.execute('DROP TABLE IF EXISTS shape_catchment')
-	print 'Dropped shape_catchment table.'
+    filepath = demographics_path + filename + '.csv'
 
-	cursor.execute("""
-		CREATE TABLE shape_catchment (shape_id TEXT);
-		""")
+    cursor.execute('DROP TABLE IF EXISTS ' + filename)
+    print 'Dropped ' + filename + ' table.'
 
-	cursor.execute("""
-		SELECT AddGeometryColumn('shape_catchment', 'catchment', """ + str(epsg_code) + """, 'GEOMETRY', 2);
-		""")
+    cursor.execute("""
+    CREATE TABLE """ + filename + """(
+        GEOID TEXT,
+        lon DOUBLE PRECISION,
+        lat DOUBLE PRECISION,
+        am_indian DOUBLE PRECISION, 
+        asian DOUBLE PRECISION,
+        black DOUBLE PRECISION,
+        latino DOUBLE PRECISION,
+        pacific DOUBLE PRECISION,
+        white DOUBLE PRECISION,
+        mixed DOUBLE PRECISION,
+        other DOUBLE PRECISION,
+        total DOUBLE PRECISION);
+        """)
 
-	cursor.execute("""
-		INSERT INTO shape_catchment
-		(shape_id, catchment)
-		SELECT
-			shape_id,
-			ST_BUFFER(the_geom, 800, 'endcap=round join=round') AS catchment
-		FROM
-			gtfs_shape_geoms
-		GROUP BY 
-		shape_id, 
-		the_geom;
-		""")
+    cursor.execute("COPY " + filename + " FROM '" + filepath + "' CSV HEADER;")
 
-	cursor.execute("""
-		CREATE INDEX "shape_catchment_gist" ON "shape_catchment" using gist ("catchment");
-		""")
-	
-	database.commit()
+    cursor.execute("SELECT AddGeometryColumn('" + filename + "', 'the_geom', " + str(epsg_code) + ", 'POINT', 2);")
 
-	print 'shape_catchment created.'
+    cursor.execute("UPDATE " + filename + " SET the_geom = ST_SetSRID(ST_MakePoint(lon, lat), 4236);")
 
+    database.commit()
 
-def import_
+    print filename + ' centroids imported.'
+
+demographics_path = '/Users/jonathanleape/Documents/11.520/inputs/demographics/'
+filename = 'atl_race_2016'
+
+import_demographics_csv(filename, 4236)
+epsg_code = get_utm_code(filename)
+project_geom(filename, epsg_code)
+
+# def import_demographics_geojson(filepath):
+
+# def import_demographics_shp(filepath):
+
+# def polygons2centroids(polygons):
+

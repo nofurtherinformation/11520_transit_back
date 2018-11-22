@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 '''
 --------------------------------
-- Calculate Parallelism Index
+- Calculate Collinearity Index
 --------------------------------
 '''
 # libraries
@@ -99,7 +99,7 @@ def pop_shape_catchment(epsg_code):
 		(shape_id, catchment)
 		SELECT
 			shape_id,
-			ST_BUFFER(the_geom, 800, 'endcap=round join=round') AS catchment
+			ST_BUFFER(the_geom, 500, 'endcap=round join=round') AS catchment
 		FROM
 			gtfs_shape_geoms
 		GROUP BY 

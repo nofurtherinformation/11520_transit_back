@@ -8,7 +8,7 @@ process_path="/Users/jonathanleape/Documents/11.520/11520_transit_back"
 # Import GTFS
 cd $import_gtfs_path
 
-# dropdb gtfs
+dropdb gtfs
 createdb gtfs -U jonathanleape -w
 
 cat gtfs_tables.sql \
@@ -20,6 +20,8 @@ psql gtfs -c "\dt"
 
 cd $process_path
 python collinear_index.py
+python import_demographics.py
+python chi2_stat.py
 
 # GeoJSON
 
