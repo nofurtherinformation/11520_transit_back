@@ -92,17 +92,17 @@ def import_demographics_csv(filename, epsg_code):
     cursor.execute("""
     CREATE TABLE """ + filename + """(
         GEOID TEXT,
-        lon DOUBLE PRECISION,
-        lat DOUBLE PRECISION,
-        am_indian DOUBLE PRECISION, 
-        asian DOUBLE PRECISION,
-        black DOUBLE PRECISION,
-        latino DOUBLE PRECISION,
-        pacific DOUBLE PRECISION,
-        white DOUBLE PRECISION,
-        mixed DOUBLE PRECISION,
-        other DOUBLE PRECISION,
-        total DOUBLE PRECISION);
+        lon REAL,
+        lat REAL,
+        am_indian REAL, 
+        asian REAL,
+        black REAL,
+        latino REAL,
+        pacific REAL,
+        white REAL,
+        mixed REAL,
+        other REAL,
+        total REAL);
         """)
 
     cursor.execute("COPY " + filename + " FROM '" + filepath + "' CSV HEADER;")

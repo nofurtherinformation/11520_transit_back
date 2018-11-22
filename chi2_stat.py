@@ -97,15 +97,15 @@ def stop_demographics(filename):
 	cursor.execute("""
 		CREATE TABLE stop_""" + filename + """ (
 			stop_id TEXT, 
-			am_indian DOUBLE PRECISION, 
-			asian DOUBLE PRECISION,
-			black DOUBLE PRECISION,
-			latino DOUBLE PRECISION,
-			pacific DOUBLE PRECISION,
-			white DOUBLE PRECISION,
-			mixed DOUBLE PRECISION,
-			other DOUBLE PRECISION,
-			total DOUBLE PRECISION);
+			am_indian REAL, 
+			asian REAL,
+			black REAL,
+			latino REAL,
+			pacific REAL,
+			white REAL,
+			mixed REAL,
+			other REAL,
+			total REAL);
 		""")
 
 	cursor.execute("""
@@ -139,15 +139,15 @@ def route_demographics(filename):
 	cursor.execute("""
 		CREATE TABLE route_""" + filename + """ (
 			route_id TEXT, 
-			am_indian DOUBLE PRECISION, 
-			asian DOUBLE PRECISION,
-			black DOUBLE PRECISION,
-			latino DOUBLE PRECISION,
-			pacific DOUBLE PRECISION,
-			white DOUBLE PRECISION,
-			mixed DOUBLE PRECISION,
-			other DOUBLE PRECISION,
-			total DOUBLE PRECISION);
+			am_indian REAL, 
+			asian REAL,
+			black REAL,
+			latino REAL,
+			pacific REAL,
+			white REAL,
+			mixed REAL,
+			other REAL,
+			total REAL);
 		""")
 
 	cursor.execute("""
@@ -182,8 +182,8 @@ def chi2_stat(filename):
 		CREATE TABLE chi2_""" + filename + """ (
 			route_id TEXT,
 			route_id2 TEXT,
-			chi2 DOUBLE PRECISION,
-			p_val DOUBLE PRECISION);
+			chi2 REAL,
+			p_val REAL);
 		""")
 
 	# 8 - 1 = 7 degrees of freedom => significant at 5% if chi2 over 14.067
@@ -215,9 +215,45 @@ def chi2_stat(filename):
 	database.commit()
 
 
+def results(filename):
+
+	cursor.execute('DROP TABLE IF EXISTS results_' + filename)
+
+	cursor.execute("""
+		CREATE TABLE results_""" + filename + """ (
+			route_id TEXT,
+			route_id2 TEXT,
+			chi2 REAL,
+			p_val REAL,
+			collinear_index REAL);
+		""")
+
+	print 'Created results_' + filename
+	
+	cursor.execute("""
+		INSERT INTO results_""" + filename + """
+		SELECT
+			ci.route_id,
+			ci.route_id2,
+			ch.chi2,
+			ch.p_val,
+			ci.index AS collinear_index
+		FROM
+			collinear_index AS ci,
+			chi2_""" + filename + """ AS ch
+		WHERE
+			ci.route_id = ch.route_id AND
+			ci.route_id2 = ch.route_id2
+		ORDER BY
+			ci.index DESC;
+		""")
+	
+	database.commit()
+
 epsg_code = 32616
 stop_catchments(epsg_code)
 route_stops()
 stop_demographics('atl_race_2016')
 route_demographics('atl_race_2016')
 chi2_stat('atl_race_2016')
+results('atl_race_2016')

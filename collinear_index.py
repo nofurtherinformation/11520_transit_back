@@ -81,13 +81,39 @@ def project_geom(input_geom, epsg_code):
 	database.commit()
 
 
-def pop_shape_catchment(epsg_code):
+def route_shapes():
+	
+	cursor.execute('DROP TABLE IF EXISTS route_shapes')
+	print 'Dropped route_shapes table.'
+
+	cursor.execute('CREATE TABLE route_shapes (route_id TEXT, shape_id TEXT);')
+
+	cursor.execute("""
+		INSERT INTO route_shapes
+		SELECT DISTINCT ON (route_id, shape_id)
+			t.route_id,
+			sh.shape_id
+		FROM
+			(SELECT DISTINCT ON (route_id) route_id, trip_id, shape_id FROM gtfs_trips) AS t,
+			gtfs_shapes AS sh
+		WHERE
+			t.shape_id = sh.shape_id
+		ORDER BY
+			route_id;
+	""")
+
+	database.commit()
+
+	print 'route_shapes created.'
+	
+
+def shape_catchment(epsg_code):
 
 	cursor.execute('DROP TABLE IF EXISTS shape_catchment')
 	print 'Dropped shape_catchment table.'
 
 	cursor.execute("""
-		CREATE TABLE shape_catchment (shape_id TEXT);
+		CREATE TABLE shape_catchment (route_id TEXT);
 		""")
 
 	cursor.execute("""
@@ -96,15 +122,18 @@ def pop_shape_catchment(epsg_code):
 
 	cursor.execute("""
 		INSERT INTO shape_catchment
-		(shape_id, catchment)
+		(route_id, catchment)
 		SELECT
-			shape_id,
+			rs.route_id,
 			ST_BUFFER(the_geom, 500, 'endcap=round join=round') AS catchment
 		FROM
-			gtfs_shape_geoms
+			route_shapes AS rs,
+			gtfs_shape_geoms AS sh
+		WHERE
+			rs.shape_id = sh.shape_id
 		GROUP BY 
-		shape_id, 
-		the_geom;
+			route_id,
+			sh.the_geom;
 		""")
 
 	cursor.execute("""
@@ -116,13 +145,13 @@ def pop_shape_catchment(epsg_code):
 	print 'shape_catchment created.'
 
 
-def pop_catchment_overlap(epsg_code):
+def catchment_overlap(epsg_code):
 
 	cursor.execute('DROP TABLE IF EXISTS catchment_overlap')
 	print 'Dropped catchment_overlap table.'
 
 	cursor.execute("""
-		CREATE TABLE catchment_overlap (shape_id TEXT, shape_id2 TEXT);
+		CREATE TABLE catchment_overlap (route_id TEXT, route_id2 TEXT);
 		""")
 
 	cursor.execute("""
@@ -131,16 +160,16 @@ def pop_catchment_overlap(epsg_code):
 
 	cursor.execute("""
 		INSERT INTO catchment_overlap
-		(shape_id, shape_id2, overlap)
+		(route_id, route_id2, overlap)
 		SELECT
-			sc.shape_id,
-			sc2.shape_id,
+			sc.route_id,
+			sc2.route_id AS route_id2,
 			ST_INTERSECTION(sc.catchment, sc2.catchment) AS overlap
 		FROM
 			shape_catchment AS sc,
 			shape_catchment AS sc2
 		WHERE
-			sc.shape_id != sc2.shape_id AND
+			sc.route_id != sc2.route_id AND
 			ST_IsEmpty(ST_INTERSECTION(sc.catchment, sc2.catchment)) = FALSE;
 		""")
 
@@ -202,53 +231,21 @@ def filter_overlap(epsg_code):
 	print 'catchment_overlap filtered as filtered_overlap.'
 
 
-def calc_collinear_index():
+def collinear_index():
 
 	cursor.execute('DROP TABLE IF EXISTS collinear_index')
 	print 'Dropped collinear_index table.'
 
 	cursor.execute("""
-		CREATE TABLE collinear_index (shape_id TEXT, shape_id2 TEXT, area1 REAL, area2 REAL, overlap_area REAL, index REAL);
+		CREATE TABLE collinear_index (route_id TEXT, route_id2 TEXT, area1 REAL, area2 REAL, overlap_area REAL, index REAL);
 		""")
 
-	# with filtering
-
-	# cursor.execute("""
-	# 	INSERT INTO collinear_index
-	# 	(shape_id, shape_id2, area1, area2, overlap_area, index)
-	# 	SELECT
-	# 		co.shape_id,
-	# 		co.shape_id2,
-	# 		ST_AREA(sc1.catchment),
-	# 		ST_AREA(sc2.catchment),
-	# 		ST_AREA(co.overlap),
-	# 		ST_AREA(co.overlap) / ST_AREA(sc1.catchment)
-	# 	FROM
-	# 		shape_catchment AS sc1,
-	# 		shape_catchment AS sc2,
-	# 		catchment_overlap AS co,
-	# 		gtfs_trips AS t1,
-	# 		gtfs_trips AS t2,
-	# 		gtfs_routes AS r1,
-	# 		gtfs_routes AS r2
-	# 	WHERE
-	# 		co.shape_id = sc1.shape_id AND
-	# 		co.shape_id2 = sc2.shape_id AND
-	# 		co.shape_id = t1.shape_id AND
-	# 		co.shape_id2 = t2.shape_id AND
-	# 		t1.route_id = r1.route_id AND
-	# 		t2.route_id = r2.route_id AND
-	# 		r1.route_id != r2.route_id AND
-	# 		t1.service_id = t2.service_id
-	# 	ORDER BY ST_AREA(co.overlap) / ST_AREA(sc1.catchment) DESC;
-	# 	""")
-	
 	cursor.execute("""
 		INSERT INTO collinear_index
-		(shape_id, shape_id2, area1, area2, overlap_area, index)
+		(route_id, route_id2, area1, area2, overlap_area, index)
 		SELECT
-			co.shape_id,
-			co.shape_id2,
+			co.route_id,
+			co.route_id2,
 			ST_AREA(sc1.catchment),
 			ST_AREA(sc2.catchment),
 			ST_AREA(co.overlap),
@@ -258,8 +255,8 @@ def calc_collinear_index():
 			shape_catchment AS sc2,
 			catchment_overlap AS co
 		WHERE
-			co.shape_id = sc1.shape_id AND
-			co.shape_id2 = sc2.shape_id
+			co.route_id = sc1.route_id AND
+			co.route_id2 = sc2.route_id
 		ORDER BY ST_AREA(co.overlap) / ST_AREA(sc1.catchment) DESC;
 		""")
 
@@ -269,10 +266,11 @@ def calc_collinear_index():
 utm_code = get_utm_code('gtfs_stops')
 project_geom('gtfs_shape_geoms', utm_code)
 project_geom('gtfs_stops', utm_code)
-pop_shape_catchment(utm_code)
-pop_catchment_overlap(utm_code)
+route_shapes()
+shape_catchment(utm_code)
+catchment_overlap(utm_code)
 # filter_overlap(utm_code)
-calc_collinear_index()
+collinear_index()
 
 
 # def catchment_demographics():
