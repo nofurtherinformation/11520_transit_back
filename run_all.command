@@ -20,6 +20,10 @@ cat gtfs_tables.sql \
 
 cd $process_path
 python collinear_index.py
+
+# import demographics geojsons
+ogr2ogr -f "PostgreSQL" PG:"dbname=gtfs user=jonathanleape" "/Users/jonathanleape/Documents/11.520/inputs/demographics/atl_race_2016.geojson" -nln atl_race_2016
+# ogr2ogr -f "PostgreSQL" PG:"dbname=gtfs user=jonathanleape" "/Users/jonathanleape/Documents/11.520/inputs/demographics/atl_race_2016.shp" -skip-failures -nlt PROMOTE_TO_MULTI -nln atl_race_2016_shp
 python import_demographics.py
 python chi2_stat.py
 python export_jsons.py

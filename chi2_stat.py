@@ -123,7 +123,7 @@ def route_stop_catchments(epsg_code):
 	database.commit()
 
 
-def stop_demographics(filename):
+def stop_demographics(filename, inputType):
 
 	cursor.execute('DROP TABLE IF EXISTS stop_' + filename)
 
@@ -141,26 +141,61 @@ def stop_demographics(filename):
 			total REAL);
 		""")
 
-	cursor.execute("""
-		INSERT INTO stop_""" + filename + """
-		SELECT
-			stop_id,
-			COALESCE(SUM(""" + filename + """.am_indian),0) AS am_indian, 
-			COALESCE(SUM(""" + filename + """.asian),0) AS asian,
-			COALESCE(SUM(""" + filename + """.black),0) AS black,
-			COALESCE(SUM(""" + filename + """.latino),0) AS latino,
-			COALESCE(SUM(""" + filename + """.pacific),0) AS pacific,
-			COALESCE(SUM(""" + filename + """.white),0) AS white,
-			COALESCE(SUM(""" + filename + """.mixed),0) AS mixed,
-			COALESCE(SUM(""" + filename + """.other),0) AS other,
-			COALESCE(SUM(""" + filename + """.total),0) AS total
-		FROM
-			stop_catchments
-			LEFT JOIN """ + filename + """
-			ON ST_Intersects(stop_catchments.the_geom, """ + filename + """.the_geom)
-		GROUP BY
-			stop_id
-		""")
+	if inputType == 'centroids':
+
+		cursor.execute("""
+			INSERT INTO stop_""" + filename + """
+			SELECT
+				stop_id,
+				COALESCE(SUM(""" + filename + """.am_indian),0) AS am_indian, 
+				COALESCE(SUM(""" + filename + """.asian),0) AS asian,
+				COALESCE(SUM(""" + filename + """.black),0) AS black,
+				COALESCE(SUM(""" + filename + """.latino),0) AS latino,
+				COALESCE(SUM(""" + filename + """.pacific),0) AS pacific,
+				COALESCE(SUM(""" + filename + """.white),0) AS white,
+				COALESCE(SUM(""" + filename + """.mixed),0) AS mixed,
+				COALESCE(SUM(""" + filename + """.other),0) AS other,
+				COALESCE(SUM(""" + filename + """.total),0) AS total
+			FROM
+				stop_catchments
+				LEFT JOIN """ + filename + """
+				ON ST_Intersects(stop_catchments.the_geom, """ + filename + """.the_geom)
+			GROUP BY
+				stop_id
+			""")
+
+	elif inputType == 'dots':
+
+		cursor.execute("""
+			INSERT INTO stop_""" + filename + """
+			SELECT
+				sc.stop_id,
+				COUNT(dump.ethnicity) FILTER (WHERE ethnicity = 'am_indian') as am_indian, 
+				COUNT(dump.ethnicity) FILTER (WHERE ethnicity = 'asian') as asian,
+				COUNT(dump.ethnicity) FILTER (WHERE ethnicity = 'black') as black,
+				COUNT(dump.ethnicity) FILTER (WHERE ethnicity = 'latino') as latino,
+				COUNT(dump.ethnicity) FILTER (WHERE ethnicity = 'pacific') as pacific,
+				COUNT(dump.ethnicity) FILTER (WHERE ethnicity = 'white') as white,
+				COUNT(dump.ethnicity) FILTER (WHERE ethnicity = 'mixed') as mixed,
+				COUNT(dump.ethnicity) FILTER (WHERE ethnicity = 'other') as other,
+				COUNT(dump.ethnicity) as total
+			FROM 
+				stop_catchments AS sc,
+				(SELECT ethnicity, (ST_Dump(the_geom)).geom AS the_geom FROM atl_race_2016_dots) AS dump
+			WHERE 
+				ST_Contains(sc.the_geom,dump.the_geom)
+			GROUP BY
+				sc.stop_id;
+			""")
+
+			# SELECT 
+			# 	sc.stop_id,
+			# 	dump.ethnicity
+			# FROM 
+			# 	stop_catchments AS sc,
+			# 	(SELECT ethnicity, (ST_Dump(the_geom)).geom AS the_geom FROM atl_race_2016_dots) AS dump
+			# WHERE 
+			# 	ST_Contains(sc.the_geom,dump.the_geom);
 
 	database.commit()
 
@@ -287,7 +322,7 @@ epsg_code = 32616
 stop_catchments(epsg_code)
 route_stops(epsg_code)
 route_stop_catchments(epsg_code)
-stop_demographics('atl_race_2016')
+stop_demographics('atl_race_2016', 'dots')
 route_demographics('atl_race_2016')
 chi2_stat('atl_race_2016')
 results('atl_race_2016')

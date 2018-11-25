@@ -43,11 +43,11 @@ cursor = database.cursor()
 def get_utm_code(input_geom):
 
 	# get centroid coords
-	cursor.execute('SELECT ST_X(ST_Transform(ST_Centroid(the_geom),4236)) FROM ' + input_geom + ';')
+	cursor.execute('SELECT ST_X(ST_Transform(ST_Centroid(the_geom),4326)) FROM ' + input_geom + ';')
 	centroid_lon = cursor.fetchone()[0]
 	print 'centroid lon is: ' + str(centroid_lon)
 
-	cursor.execute('SELECT ST_Y(ST_Transform(ST_Centroid(the_geom),4236)) FROM ' + input_geom + ';')
+	cursor.execute('SELECT ST_Y(ST_Transform(ST_Centroid(the_geom),4326)) FROM ' + input_geom + ';')
 	centroid_lat = cursor.fetchone()[0]
 	print 'centroid lat is: ' + str(centroid_lat)
 

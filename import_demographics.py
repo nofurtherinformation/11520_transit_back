@@ -10,7 +10,10 @@ import time
 import sys
 import math
 import utm
-# import osgeo.ogr
+# import ogr2ogr
+# import osgeo
+# import gdaltools
+
 # local
 # from project_to_utm import get_utm_code, project_geom
 
@@ -40,15 +43,23 @@ except:
 
 cursor = database.cursor()
 
+# ogr = gdaltools.ogr2ogr()
+# conn = gdaltools.PgConnectionString(dbname = db_database, user = db_user, password = db_passwd, host = db_host, port = db_port)
+
+# def main(path, filename):
+#   #note: main is expecting sys.argv, where the first argument is the script name
+#   #so, the argument indices in the array need to be offset by 1
+#   ogr2ogr.main(["","-f", "PostgreSQL", filename, path + filename + '.geojson'])
+
 
 def get_utm_code(input_geom):
 
 	# get centroid coords
-	cursor.execute('SELECT ST_X(ST_Transform(ST_Centroid(the_geom),4236)) FROM ' + input_geom + ';')
+	cursor.execute('SELECT ST_X(ST_Transform(ST_Centroid(the_geom),4326)) FROM ' + input_geom + ';')
 	centroid_lon = cursor.fetchone()[0]
 	print 'centroid lon is: ' + str(centroid_lon)
 
-	cursor.execute('SELECT ST_Y(ST_Transform(ST_Centroid(the_geom),4236)) FROM ' + input_geom + ';')
+	cursor.execute('SELECT ST_Y(ST_Transform(ST_Centroid(the_geom),4326)) FROM ' + input_geom + ';')
 	centroid_lat = cursor.fetchone()[0]
 	print 'centroid lat is: ' + str(centroid_lat)
 
@@ -82,45 +93,140 @@ def project_geom(input_geom, epsg_code):
 	database.commit()
 
 
-def import_demographics_csv(filename, epsg_code):
+# def import_demographics_csv(path, filename, epsg_code):
 
-    filepath = demographics_path + filename + '.csv'
+#     filepath = path + filename + '.csv'
 
-    cursor.execute('DROP TABLE IF EXISTS ' + filename)
-    print 'Dropped ' + filename + ' table.'
+#     cursor.execute('DROP TABLE IF EXISTS ' + filename)
+#     print 'Dropped ' + filename + ' table.'
 
-    cursor.execute("""
-    CREATE TABLE """ + filename + """(
-        GEOID TEXT,
-        lon REAL,
-        lat REAL,
-        am_indian REAL, 
-        asian REAL,
-        black REAL,
-        latino REAL,
-        pacific REAL,
-        white REAL,
-        mixed REAL,
-        other REAL,
-        total REAL);
-        """)
+#     cursor.execute("""
+#     CREATE TABLE """ + filename + """(
+#         GEOID TEXT,
+#         lon REAL,
+#         lat REAL,
+#         am_indian REAL, 
+#         asian REAL,
+#         black REAL,
+#         latino REAL,
+#         pacific REAL,
+#         white REAL,
+#         mixed REAL,
+#         other REAL,
+#         total REAL);
+#         """)
 
-    cursor.execute("COPY " + filename + " FROM '" + filepath + "' CSV HEADER;")
+#     cursor.execute("COPY " + filename + " FROM '" + filepath + "' CSV HEADER;")
 
-    cursor.execute("SELECT AddGeometryColumn('" + filename + "', 'the_geom', " + str(epsg_code) + ", 'POINT', 2);")
+#     cursor.execute("SELECT AddGeometryColumn('" + filename + "', 'the_geom', " + str(epsg_code) + ", 'POINT', 2);")
 
-    cursor.execute("UPDATE " + filename + " SET the_geom = ST_SetSRID(ST_MakePoint(lon, lat), 4236);")
+#     cursor.execute("UPDATE " + filename + " SET the_geom = ST_SetSRID(ST_MakePoint(lon, lat), 4326);")
 
-    database.commit()
+#     database.commit()
 
-    print filename + ' centroids imported.'
+#     print filename + ' centroids imported.'
 
-demographics_path = '/Users/jonathanleape/Documents/11.520/inputs/demographics/'
+
+# def import_geojson(path, filename, epsg_code):
+
+# 	cursor.execute('DROP TABLE IF EXISTS ' + filename)
+# 	print 'Dropped ' + filename + ' table.'
+
+# 	ogr.set_input(filename + '.geojson', srs='EPSG:4326')
+# 	ogr.set_output(conn, table_name=filename)
+# 	ogr.execute()
+
+# 	print filename + ' geojson imported.'
+
+def demographic_dots(filename, epsg_code, ppp):
+
+	# cursor.execute('ALTER TABLE ' + filename + ' RENAME COLUMN wkb_geometry TO the_geom;')
+
+	cursor.execute('DROP TABLE IF EXISTS ' + filename + '_dots;')
+
+	cursor.execute('CREATE TABLE ' + filename + '_dots (ethnicity TEXT, t INT);')
+
+	cursor.execute("SELECT AddGeometryColumn('" + filename + "_dots', 'the_geom', " + str(epsg_code) + ", 'MULTIPOINT', 2);")
+
+	cursor.execute("""
+		INSERT INTO """ + filename + """_dots
+	 	(ethnicity, t, the_geom)
+	 	SELECT 
+			'am_indian' as ethnicity,
+			""" + ppp + """ as t,
+			ST_GeneratePoints(the_geom, am_indian::integer / """ + ppp + """) as the_geom
+		FROM """ + filename + """ 
+
+		UNION
+
+		SELECT 
+			'asian' as ethnicity,
+			""" + ppp + """ as t,
+			ST_GeneratePoints(the_geom, asian::integer / """ + ppp + """) as the_geom 
+		FROM """ + filename + """ 
+
+		UNION
+
+		SELECT 
+			'black' as ethnicity,
+			""" + ppp + """ as t,
+			ST_GeneratePoints(the_geom, black::integer / """ + ppp + """) as the_geom
+		FROM """ + filename + """
+
+		UNION
+
+		SELECT 
+			'latino' as ethnicity,
+			""" + ppp + """ as t,
+			ST_GeneratePoints(the_geom, latino::integer / """ + ppp + """) as the_geom
+		FROM """ + filename + """
+
+		UNION
+		
+		SELECT 
+			'pacific' as ethnicity,
+			""" + ppp + """ as t,
+			ST_GeneratePoints(the_geom, pacific::integer / """ + ppp + """) as the_geom
+		FROM """ + filename + """
+
+		UNION
+		
+		SELECT 
+			'white' as ethnicity,
+			""" + ppp + """ as t,
+			ST_GeneratePoints(the_geom, white::integer / """ + ppp + """) as the_geom
+		FROM """ + filename + """
+
+		UNION
+		
+		SELECT 
+			'mixed' as ethnicity,
+			""" + ppp + """ as t,
+			ST_GeneratePoints(the_geom, mixed::integer / """ + ppp + """) as the_geom
+		FROM """ + filename + """
+
+		UNION
+		
+		SELECT 
+			'other' as ethnicity,
+			""" + ppp + """ as t,
+			ST_GeneratePoints(the_geom, other::integer / """ + ppp + """) as the_geom
+		FROM """ + filename + """;
+	""")
+
+	database.commit()
+
+
+path = '/Users/jonathanleape/Documents/11.520/inputs/demographics/'
 filename = 'atl_race_2016'
+epsg_code = 32616
 
-import_demographics_csv(filename, 4236)
+# import_demographics_csv(path, filename, 4326)
+# import_geojson(path, filename, 4326)
 epsg_code = get_utm_code(filename)
 project_geom(filename, epsg_code)
+# filename2 = 'atl_race_2016_geojson'
+demographic_dots(filename, epsg_code, '10')
 
 # def import_demographics_geojson(filepath):
 
