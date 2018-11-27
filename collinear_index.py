@@ -112,21 +112,21 @@ def route_shapes(epsg_code):
 	print 'route_shapes created.'
 	
 
-def shape_catchments(epsg_code):
+def route_catchments(epsg_code):
 
-	cursor.execute('DROP TABLE IF EXISTS shape_catchments')
-	print 'Dropped shape_catchments table.'
+	cursor.execute('DROP TABLE IF EXISTS route_catchments')
+	print 'Dropped route_catchments table.'
 
 	cursor.execute("""
-		CREATE TABLE shape_catchments (route_id TEXT);
+		CREATE TABLE route_catchments (route_id TEXT);
 		""")
 
 	cursor.execute("""
-		SELECT AddGeometryColumn('shape_catchments', 'the_geom', """ + str(epsg_code) + """, 'GEOMETRY', 2);
+		SELECT AddGeometryColumn('route_catchments', 'the_geom', """ + str(epsg_code) + """, 'GEOMETRY', 2);
 		""")
 
 	cursor.execute("""
-		INSERT INTO shape_catchments
+		INSERT INTO route_catchments
 		(route_id, the_geom)
 		SELECT
 			rs.route_id,
@@ -136,12 +136,12 @@ def shape_catchments(epsg_code):
 		""")
 
 	cursor.execute("""
-		CREATE INDEX "shape_catchments_gist" ON "shape_catchments" using gist ("the_geom");
+		CREATE INDEX "route_catchments_gist" ON "route_catchments" using gist ("the_geom");
 		""")
 	
 	database.commit()
 
-	print 'shape_catchments created.'
+	print 'route_catchments created.'
 
 
 def catchment_overlap(epsg_code):
@@ -165,8 +165,8 @@ def catchment_overlap(epsg_code):
 			sc2.route_id AS route_id2,
 			ST_INTERSECTION(sc.the_geom, sc2.the_geom) AS overlap
 		FROM
-			shape_catchments AS sc,
-			shape_catchments AS sc2
+			route_catchments AS sc,
+			route_catchments AS sc2
 		WHERE
 			sc.route_id != sc2.route_id AND
 			ST_IsEmpty(ST_INTERSECTION(sc.the_geom, sc2.the_geom)) = FALSE;
@@ -250,8 +250,8 @@ def collinear_index():
 			ST_AREA(co.overlap),
 			ST_AREA(co.overlap) / ST_AREA(sc1.the_geom)
 		FROM
-			shape_catchments AS sc1,
-			shape_catchments AS sc2,
+			route_catchments AS sc1,
+			route_catchments AS sc2,
 			catchment_overlap AS co
 		WHERE
 			co.route_id = sc1.route_id AND
@@ -266,7 +266,7 @@ utm_code = get_utm_code('gtfs_stops')
 project_geom('gtfs_shape_geoms', utm_code)
 project_geom('gtfs_stops', utm_code)
 route_shapes(utm_code)
-shape_catchments(utm_code)
+route_catchments(utm_code)
 catchment_overlap(utm_code)
 # filter_overlap(utm_code)
 collinear_index()

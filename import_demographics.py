@@ -10,6 +10,7 @@ import time
 import sys
 import math
 import utm
+import os
 # import ogr2ogr
 # import osgeo
 # import gdaltools
@@ -21,7 +22,8 @@ reload(sys)
 sys.setdefaultencoding('utf8')
 
 # arguments
-# path_gtfs = sys.argv[1] if len(sys.argv) > 1 else ''
+demo_path = sys.argv[1]
+dpp = sys.argv[2] if len(sys.argv) > 2 else 10
 
 # start time
 print ' '
@@ -54,6 +56,7 @@ cursor = database.cursor()
 
 def get_utm_code(input_geom):
 
+	print 'Idenitifying UTM zone of demographic data.'
 	# get centroid coords
 	cursor.execute('SELECT ST_X(ST_Transform(ST_Centroid(the_geom),4326)) FROM ' + input_geom + ';')
 	centroid_lon = cursor.fetchone()[0]
@@ -77,6 +80,7 @@ def get_utm_code(input_geom):
 
 def project_geom(input_geom, epsg_code):
 
+	print 'Projecting demographic data to UTM for geoprocessing.'
 	# get original SRID
 	cursor.execute('SELECT ST_SRID(the_geom) FROM ' + input_geom + ';')
 	original_SRID = str(cursor.fetchone()[0])
@@ -138,99 +142,93 @@ def project_geom(input_geom, epsg_code):
 
 # 	print filename + ' geojson imported.'
 
-def demographic_dots(filename, epsg_code, ppp):
+def demographic_dots(filename, epsg_code, dots):
 
-	# cursor.execute('ALTER TABLE ' + filename + ' RENAME COLUMN wkb_geometry TO the_geom;')
-
+	print 'Creating dot density cloud for ' + filename + ' data.'
 	cursor.execute('DROP TABLE IF EXISTS ' + filename + '_dots;')
-
-	cursor.execute('CREATE TABLE ' + filename + '_dots (ethnicity TEXT, t INT);')
-
+	cursor.execute('CREATE TABLE ' + filename + '_dots (demographic TEXT, t INT);')
 	cursor.execute("SELECT AddGeometryColumn('" + filename + "_dots', 'the_geom', " + str(epsg_code) + ", 'MULTIPOINT', 2);")
 
 	cursor.execute("""
 		INSERT INTO """ + filename + """_dots
-	 	(ethnicity, t, the_geom)
+	 	(demographic, t, the_geom)
 	 	SELECT 
-			'am_indian' as ethnicity,
-			""" + ppp + """ as t,
-			ST_GeneratePoints(the_geom, am_indian::integer / """ + ppp + """) as the_geom
+			'am_indian' as demographic,
+			""" + dots + """ as dpp,
+			ST_GeneratePoints(the_geom, am_indian::integer / """ + dots + """) as the_geom
 		FROM """ + filename + """ 
 
 		UNION
 
 		SELECT 
-			'asian' as ethnicity,
-			""" + ppp + """ as t,
-			ST_GeneratePoints(the_geom, asian::integer / """ + ppp + """) as the_geom 
+			'asian' as demographic,
+			""" + dots + """ as dpp,
+			ST_GeneratePoints(the_geom, asian::integer / """ + dots + """) as the_geom 
 		FROM """ + filename + """ 
 
 		UNION
 
 		SELECT 
-			'black' as ethnicity,
-			""" + ppp + """ as t,
-			ST_GeneratePoints(the_geom, black::integer / """ + ppp + """) as the_geom
+			'black' as demographic,
+			""" + dots + """ as dpp,
+			ST_GeneratePoints(the_geom, black::integer / """ + dots + """) as the_geom
 		FROM """ + filename + """
 
 		UNION
 
 		SELECT 
-			'latino' as ethnicity,
-			""" + ppp + """ as t,
-			ST_GeneratePoints(the_geom, latino::integer / """ + ppp + """) as the_geom
-		FROM """ + filename + """
-
-		UNION
-		
-		SELECT 
-			'pacific' as ethnicity,
-			""" + ppp + """ as t,
-			ST_GeneratePoints(the_geom, pacific::integer / """ + ppp + """) as the_geom
+			'latino' as demographic,
+			""" + dots + """ as dpp,
+			ST_GeneratePoints(the_geom, latino::integer / """ + dots + """) as the_geom
 		FROM """ + filename + """
 
 		UNION
 		
 		SELECT 
-			'white' as ethnicity,
-			""" + ppp + """ as t,
-			ST_GeneratePoints(the_geom, white::integer / """ + ppp + """) as the_geom
+			'pacific' as demographic,
+			""" + dots + """ as dpp,
+			ST_GeneratePoints(the_geom, pacific::integer / """ + dots + """) as the_geom
 		FROM """ + filename + """
 
 		UNION
 		
 		SELECT 
-			'mixed' as ethnicity,
-			""" + ppp + """ as t,
-			ST_GeneratePoints(the_geom, mixed::integer / """ + ppp + """) as the_geom
+			'white' as demographic,
+			""" + dots + """ as dpp,
+			ST_GeneratePoints(the_geom, white::integer / """ + dots + """) as the_geom
 		FROM """ + filename + """
 
 		UNION
 		
 		SELECT 
-			'other' as ethnicity,
-			""" + ppp + """ as t,
-			ST_GeneratePoints(the_geom, other::integer / """ + ppp + """) as the_geom
+			'mixed' as demographic,
+			""" + dots + """ as dpp,
+			ST_GeneratePoints(the_geom, mixed::integer / """ + dots + """) as the_geom
+		FROM """ + filename + """
+
+		UNION
+		
+		SELECT 
+			'other' as demographic,
+			""" + dots + """ as dpp,
+			ST_GeneratePoints(the_geom, other::integer / """ + dots + """) as the_geom
 		FROM """ + filename + """;
 	""")
 
 	database.commit()
 
 
-path = '/Users/jonathanleape/Documents/11.520/inputs/demographics/'
-filename = 'atl_race_2016'
-epsg_code = 32616
+for filename in os.listdir(demo_path):
+    
+	if filename.endswith(".geojson"): 
+		
+		f = os.path.splitext(filename)[0]
+		
+		# project layer
+		epsg_code = get_utm_code(f)
+		project_geom(f, epsg_code)
 
-# import_demographics_csv(path, filename, 4326)
-# import_geojson(path, filename, 4326)
-epsg_code = get_utm_code(filename)
-project_geom(filename, epsg_code)
-# filename2 = 'atl_race_2016_geojson'
-demographic_dots(filename, epsg_code, '10')
+		# create dot density cloud
+		demographic_dots(f, epsg_code, dpp)
 
-# def import_demographics_geojson(filepath):
-
-# def import_demographics_shp(filepath):
-
-# def polygons2centroids(polygons):
 

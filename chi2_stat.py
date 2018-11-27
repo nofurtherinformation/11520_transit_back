@@ -10,6 +10,7 @@ import time
 import sys
 import math
 import utm
+import os
 # local
 # from project_to_utm import get_utm_code, project_geom
 
@@ -17,7 +18,9 @@ reload(sys)
 sys.setdefaultencoding('utf8')
 
 # arguments
-# path_gtfs = sys.argv[1] if len(sys.argv) > 1 else ''
+demo_path = sys.argv[1]
+inputType = sys.argv[2] if len(sys.argv) > 2 else 'dots'
+dpp = sys.argv[3] if len(sys.argv) > 2 else 10
 
 # start time
 print ' '
@@ -41,10 +44,9 @@ cursor = database.cursor()
 
 def stop_catchments(epsg_code):
 
+	print 'Creating stop_catchments layer of stop buffers.'
 	cursor.execute('DROP TABLE IF EXISTS stop_catchments')
-
 	cursor.execute('CREATE TABLE stop_catchments (stop_id TEXT, stop_name TEXT);')
-
 	cursor.execute("""
 		SELECT AddGeometryColumn('stop_catchments', 'the_geom', """ + str(epsg_code) + """, 'GEOMETRY', 2);
 		""")
@@ -65,10 +67,9 @@ def stop_catchments(epsg_code):
 
 def route_stops(epsg_code):
 
+	print 'Creating route_stops layer of stop sequences by route.'
 	cursor.execute('DROP TABLE IF EXISTS route_stops')
-
 	cursor.execute('CREATE TABLE route_stops (route_id TEXT, stop_id TEXT, stop_sequence INT);')
-
 	cursor.execute("""
 		SELECT AddGeometryColumn('route_stops', 'the_geom', """ + str(epsg_code) + """, 'GEOMETRY', 2);
 		""")
@@ -98,10 +99,9 @@ def route_stops(epsg_code):
 
 def route_stop_catchments(epsg_code):
 
+	print 'Creating route_stop_catchments layer of stop buffers by route.'
 	cursor.execute('DROP TABLE IF EXISTS route_stop_catchments')
-
 	cursor.execute('CREATE TABLE route_stop_catchments (route_id TEXT, stop_id TEXT, stop_sequence INT);')
-
 	cursor.execute("""
 		SELECT AddGeometryColumn('route_stop_catchments', 'the_geom', """ + str(epsg_code) + """, 'GEOMETRY', 2);
 		""")
@@ -125,6 +125,7 @@ def route_stop_catchments(epsg_code):
 
 def stop_demographics(filename, inputType):
 
+	print 'Creating table of demographics by stop with ' + filename + ' ' + inputType + '.'
 	cursor.execute('DROP TABLE IF EXISTS stop_' + filename)
 
 	cursor.execute("""
@@ -170,38 +171,30 @@ def stop_demographics(filename, inputType):
 			INSERT INTO stop_""" + filename + """
 			SELECT
 				sc.stop_id,
-				COUNT(dump.ethnicity) FILTER (WHERE ethnicity = 'am_indian') as am_indian, 
-				COUNT(dump.ethnicity) FILTER (WHERE ethnicity = 'asian') as asian,
-				COUNT(dump.ethnicity) FILTER (WHERE ethnicity = 'black') as black,
-				COUNT(dump.ethnicity) FILTER (WHERE ethnicity = 'latino') as latino,
-				COUNT(dump.ethnicity) FILTER (WHERE ethnicity = 'pacific') as pacific,
-				COUNT(dump.ethnicity) FILTER (WHERE ethnicity = 'white') as white,
-				COUNT(dump.ethnicity) FILTER (WHERE ethnicity = 'mixed') as mixed,
-				COUNT(dump.ethnicity) FILTER (WHERE ethnicity = 'other') as other,
-				COUNT(dump.ethnicity) as total
+				""" + dpp + """ * COUNT(dump.demographic) FILTER (WHERE demographic = 'am_indian') as am_indian, 
+				""" + dpp + """ * COUNT(dump.demographic) FILTER (WHERE demographic = 'asian') as asian,
+				""" + dpp + """ * COUNT(dump.demographic) FILTER (WHERE demographic = 'black') as black,
+				""" + dpp + """ * COUNT(dump.demographic) FILTER (WHERE demographic = 'latino') as latino,
+				""" + dpp + """ * COUNT(dump.demographic) FILTER (WHERE demographic = 'pacific') as pacific,
+				""" + dpp + """ * COUNT(dump.demographic) FILTER (WHERE demographic = 'white') as white,
+				""" + dpp + """ * COUNT(dump.demographic) FILTER (WHERE demographic = 'mixed') as mixed,
+				""" + dpp + """ * COUNT(dump.demographic) FILTER (WHERE demographic = 'other') as other,
+				""" + dpp + """ * COUNT(dump.demographic) as total
 			FROM 
 				stop_catchments AS sc,
-				(SELECT ethnicity, (ST_Dump(the_geom)).geom AS the_geom FROM atl_race_2016_dots) AS dump
+				(SELECT demographic, (ST_Dump(the_geom)).geom AS the_geom FROM """ + filename + """_dots) AS dump
 			WHERE 
 				ST_Contains(sc.the_geom,dump.the_geom)
 			GROUP BY
 				sc.stop_id;
 			""")
 
-			# SELECT 
-			# 	sc.stop_id,
-			# 	dump.ethnicity
-			# FROM 
-			# 	stop_catchments AS sc,
-			# 	(SELECT ethnicity, (ST_Dump(the_geom)).geom AS the_geom FROM atl_race_2016_dots) AS dump
-			# WHERE 
-			# 	ST_Contains(sc.the_geom,dump.the_geom);
-
 	database.commit()
 
 
 def route_demographics(filename):
 
+	print 'Creating table of demographic data by routes with ' + filename + ' data.'
 	cursor.execute('DROP TABLE IF EXISTS route_' + filename)
 
 	cursor.execute("""
@@ -244,6 +237,7 @@ def route_demographics(filename):
 
 def chi2_stat(filename):
 
+	print 'Calculating chi-squared statistic by route pair with ' + filename + ' data.'
 	cursor.execute('DROP TABLE IF EXISTS chi2_' + filename)
 
 	cursor.execute("""
@@ -254,7 +248,10 @@ def chi2_stat(filename):
 			p_val REAL);
 		""")
 
-	# 8 - 1 = 7 degrees of freedom => significant at 5% if chi2 over 14.067
+	# 8 - 1 = 7 degrees of freedom
+	# P-val 0.20	0.10	0.05	0.025	0.02	0.01	0.005	0.002	0.001
+	# Chi^2 9.803	12.017	14.067	16.013	16.622	18.475	20.278	22.601	24.322
+
 	cursor.execute("""
 		INSERT INTO chi2_""" + filename + """
 		SELECT
@@ -285,8 +282,8 @@ def chi2_stat(filename):
 
 def results(filename):
 
+	print 'Consolidating collinearity indices and chi-square stats by route-pair for ' + filename + ' data.'
 	cursor.execute('DROP TABLE IF EXISTS results_' + filename)
-
 	cursor.execute("""
 		CREATE TABLE results_""" + filename + """ (
 			route_id TEXT,
@@ -322,7 +319,16 @@ epsg_code = 32616
 stop_catchments(epsg_code)
 route_stops(epsg_code)
 route_stop_catchments(epsg_code)
-stop_demographics('atl_race_2016', 'dots')
-route_demographics('atl_race_2016')
-chi2_stat('atl_race_2016')
-results('atl_race_2016')
+
+
+for filename in os.listdir(demo_path):
+    
+	if filename.endswith(".geojson"): 
+		
+		f = os.path.splitext(filename)[0]
+
+		# geoprocessing demographic data
+		stop_demographics(f, inputType)
+		route_demographics(f)
+		chi2_stat(f)
+		results(f)
