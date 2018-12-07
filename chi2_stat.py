@@ -11,20 +11,29 @@ import sys
 import math
 import utm
 import os
-# local
-# from project_to_utm import get_utm_code, project_geom
+from scipy.stats import chi2
 
 reload(sys)
 sys.setdefaultencoding('utf8')
 
 # arguments
-demo_path = sys.argv[1]
-inputType = sys.argv[2] if len(sys.argv) > 2 else 'dots'
-dpp = sys.argv[3] if len(sys.argv) > 2 else 10
+
+if len(sys.argv) == 3 and sys.argv[2] == 'dots':
+	dpp = 10
+
+if len(sys.argv) < 3:
+	inputType = 'polygons'
+else:
+	inputType = sys.argv[2]
+
+if len(sys.argv) < 2:
+	demo_path = '/Users/jonathanleape/Documents/11.520/shared/atlanta/2_postgis_inputs/demographics/race/'
+else: 
+	demo_path = sys.argv[1]
 
 # start time
 print ' '
-print '--Starting--'
+print '--Starting ' + sys.argv[0] + '--'
 print ' '
 
 # Establish a Postgres connection
@@ -41,6 +50,23 @@ except:
 	print 'database connection failed.'
 
 cursor = database.cursor()
+
+def get_SRID(input_geom):
+
+	cursor.execute('SELECT ST_SRID(the_geom) FROM ' + input_geom + ';')
+	SRID = str(cursor.fetchone()[0])
+	print 'The current layer SRID is: ' + SRID
+	return SRID
+
+def demographic_fields(table):
+
+	cursor.execute("SELECT column_name FROM information_schema.columns WHERE table_name = '" + table + "';")
+	columns = cursor.fetchall()
+	fields = []
+	for c in columns:
+		if c[0] not in ('geoid', 'total', 'area1', 'the_geom', 'ogc_fid'):
+			fields.append(c[0])
+	return fields
 
 def stop_catchments(epsg_code):
 
@@ -125,11 +151,11 @@ def route_stop_catchments(epsg_code):
 
 def stop_demographics(filename, inputType):
 
-	print 'Creating table of demographics by stop with ' + filename + ' ' + inputType + '.'
-	cursor.execute('DROP TABLE IF EXISTS stop_' + filename)
+	print 'Creating table of demographic profiles by stop with ' + filename + ' ' + inputType + '.'
+	cursor.execute('DROP TABLE IF EXISTS stop_profiles_' + filename)
 
 	cursor.execute("""
-		CREATE TABLE stop_""" + filename + """ (
+		CREATE TABLE stop_profiles_""" + filename + """ (
 			stop_id TEXT, 
 			am_indian REAL, 
 			asian REAL,
@@ -145,7 +171,7 @@ def stop_demographics(filename, inputType):
 	if inputType == 'centroids':
 
 		cursor.execute("""
-			INSERT INTO stop_""" + filename + """
+			INSERT INTO stop_profiles_""" + filename + """
 			SELECT
 				stop_id,
 				COALESCE(SUM(""" + filename + """.am_indian),0) AS am_indian, 
@@ -168,18 +194,18 @@ def stop_demographics(filename, inputType):
 	elif inputType == 'dots':
 
 		cursor.execute("""
-			INSERT INTO stop_""" + filename + """
+			INSERT INTO stop_profiles_""" + filename + """
 			SELECT
 				sc.stop_id,
-				""" + dpp + """ * COUNT(dump.demographic) FILTER (WHERE demographic = 'am_indian') as am_indian, 
-				""" + dpp + """ * COUNT(dump.demographic) FILTER (WHERE demographic = 'asian') as asian,
-				""" + dpp + """ * COUNT(dump.demographic) FILTER (WHERE demographic = 'black') as black,
-				""" + dpp + """ * COUNT(dump.demographic) FILTER (WHERE demographic = 'latino') as latino,
-				""" + dpp + """ * COUNT(dump.demographic) FILTER (WHERE demographic = 'pacific') as pacific,
-				""" + dpp + """ * COUNT(dump.demographic) FILTER (WHERE demographic = 'white') as white,
-				""" + dpp + """ * COUNT(dump.demographic) FILTER (WHERE demographic = 'mixed') as mixed,
-				""" + dpp + """ * COUNT(dump.demographic) FILTER (WHERE demographic = 'other') as other,
-				""" + dpp + """ * COUNT(dump.demographic) as total
+				""" + dpp + """ * COUNT(dump.demographic) FILTER (WHERE demographic = 'am_indian') AS am_indian,
+				""" + dpp + """ * COUNT(dump.demographic) FILTER (WHERE demographic = 'asian') AS asian,
+				""" + dpp + """ * COUNT(dump.demographic) FILTER (WHERE demographic = 'black') AS black,
+				""" + dpp + """ * COUNT(dump.demographic) FILTER (WHERE demographic = 'latino') AS latino,
+				""" + dpp + """ * COUNT(dump.demographic) FILTER (WHERE demographic = 'pacific') AS pacific,
+				""" + dpp + """ * COUNT(dump.demographic) FILTER (WHERE demographic = 'white') AS white,
+				""" + dpp + """ * COUNT(dump.demographic) FILTER (WHERE demographic = 'mixed') AS mixed,
+				""" + dpp + """ * COUNT(dump.demographic) FILTER (WHERE demographic = 'other') AS other,
+				""" + dpp + """ * COUNT(dump.demographic) AS total
 			FROM 
 				stop_catchments AS sc,
 				(SELECT demographic, (ST_Dump(the_geom)).geom AS the_geom FROM """ + filename + """_dots) AS dump
@@ -188,17 +214,56 @@ def stop_demographics(filename, inputType):
 			GROUP BY
 				sc.stop_id;
 			""")
+	
+	elif inputType == 'polygons':
+
+		cursor.execute('ALTER TABLE ' + filename + ' ADD COLUMN IF NOT EXISTS area1 real;')
+		cursor.execute('UPDATE ' + filename + '	SET	area1 = ST_Area(the_geom);')
+
+		cursor.execute("""
+			INSERT INTO stop_profiles_""" + filename + """
+			SELECT
+				stop_id,
+				SUM(am_indian * area2 / area1) AS am_indian, 
+				SUM(asian * area2 / area1) AS asian, 
+				SUM(black * area2 / area1) AS black,
+				SUM(latino * area2 / area1) AS latino,
+				SUM(pacific * area2 / area1) AS pacific,
+				SUM(white * area2 / area1) AS white,
+				SUM(mixed * area2 / area1) AS mixed,
+				SUM(other * area2 / area1) AS other,
+				SUM(total * area2 / area1) AS total
+			FROM (
+				SELECT 
+					sc.stop_id,
+                    d.area1, 
+                    ST_Area((ST_Dump(ST_Intersection(sc.the_geom, d.the_geom))).geom) AS area2,
+					d.am_indian, 
+                    d.asian, 
+                    d.black,
+					d.latino,
+					d.pacific,
+					d.white,
+					d.mixed,
+					d.other,
+					d.total				
+				FROM stop_catchments AS sc
+					INNER JOIN """ + filename + """ AS d
+					ON ST_Intersects(sc.the_geom, d.the_geom)) AS clipped
+			GROUP BY
+				stop_id;
+			""")
 
 	database.commit()
 
 
 def route_demographics(filename):
 
-	print 'Creating table of demographic data by routes with ' + filename + ' data.'
-	cursor.execute('DROP TABLE IF EXISTS route_' + filename)
+	print 'Creating table of demographic profiles by routes with ' + filename + ' data.'
+	cursor.execute('DROP TABLE IF EXISTS route_profiles_' + filename)
 
 	cursor.execute("""
-		CREATE TABLE route_""" + filename + """ (
+		CREATE TABLE route_profiles_""" + filename + """ (
 			route_id TEXT, 
 			am_indian REAL, 
 			asian REAL,
@@ -212,34 +277,33 @@ def route_demographics(filename):
 		""")
 
 	cursor.execute("""
-		INSERT INTO route_""" + filename + """
+		INSERT INTO route_profiles_""" + filename + """
 		SELECT
 			route_id,
-			SUM(stop_""" + filename + """.am_indian) AS am_indian, 
-			SUM(stop_""" + filename + """.asian) AS asian,
-			SUM(stop_""" + filename + """.black) AS black,
-			SUM(stop_""" + filename + """.latino) AS latino,
-			SUM(stop_""" + filename + """.pacific) AS pacific,
-			SUM(stop_""" + filename + """.white) AS white,
-			SUM(stop_""" + filename + """.mixed) AS mixed,
-			SUM(stop_""" + filename + """.other) AS other,
-			SUM(stop_""" + filename + """.total) AS total
+			SUM(stop_profiles_""" + filename + """.am_indian) AS am_indian, 
+			SUM(stop_profiles_""" + filename + """.asian) AS asian,
+			SUM(stop_profiles_""" + filename + """.black) AS black,
+			SUM(stop_profiles_""" + filename + """.latino) AS latino,
+			SUM(stop_profiles_""" + filename + """.pacific) AS pacific,
+			SUM(stop_profiles_""" + filename + """.white) AS white,
+			SUM(stop_profiles_""" + filename + """.mixed) AS mixed,
+			SUM(stop_profiles_""" + filename + """.other) AS other,
+			SUM(stop_profiles_""" + filename + """.total) AS total
 		FROM
 			route_stops,
-			stop_""" + filename + """
+			stop_profiles_""" + filename + """
 		WHERE
-			route_stops.stop_id = stop_""" + filename + """.stop_id
+			route_stops.stop_id = stop_profiles_""" + filename + """.stop_id
 		GROUP BY
 			route_id;
 		""")
 	
 	database.commit()
 
-def chi2_stat(filename):
+def chi2_stat(filename, df):
 
-	print 'Calculating chi-squared statistic by route pair with ' + filename + ' data.'
+	print 'Calculating chi-squared statistic with ' + str(df) + ' degrees of freedom for each route pair with ' + filename + ' data.'
 	cursor.execute('DROP TABLE IF EXISTS chi2_' + filename)
-
 	cursor.execute("""
 		CREATE TABLE chi2_""" + filename + """ (
 			route_id TEXT,
@@ -248,12 +312,7 @@ def chi2_stat(filename):
 			p_val REAL);
 		""")
 
-	# 8 - 1 = 7 degrees of freedom
-	# P-val 0.20	0.10	0.05	0.025	0.02	0.01	0.005	0.002	0.001
-	# Chi^2 9.803	12.017	14.067	16.013	16.622	18.475	20.278	22.601	24.322
-
-	cursor.execute("""
-		INSERT INTO chi2_""" + filename + """
+	cursor.execute("""	
 		SELECT
 			r1.route_id,
 			r2.route_id AS route_id2,
@@ -266,60 +325,27 @@ def chi2_stat(filename):
 			COALESCE((r1.white/r1.total - r2.white/r2.total)^2 / (NULLIF(r1.white,0)/r1.total),0) + 
 			COALESCE((r1.mixed/r1.total - r2.mixed/r2.total)^2 / (NULLIF(r1.mixed,0)/r1.total),0) + 
 			COALESCE((r1.other/r1.total - r2.other/r2.total)^2 / (NULLIF(r1.other,0)/r1.total),0)
-			END AS chi2,
-			1 AS p_val
+			END AS chi2
 		FROM
-			route_""" + filename + """ AS r1,
-			route_""" + filename + """ AS r2
+			route_profiles_""" + filename + """ AS r1,
+			route_profiles_""" + filename + """ AS r2
 		WHERE
 			r1.route_id != r2.route_id
 		ORDER BY
 			chi2 DESC;
 		""")
 
+	for row in cursor.fetchall():
+		p_val = 1 - chi2.cdf(row[2], df)
+		cursor.execute('INSERT INTO chi2_' + filename + ' VALUES (%s, %s, %s, %s)', (row[0], row[1], row[2], p_val))
+
 	database.commit()
 
 
-def results(filename):
-
-	print 'Consolidating collinearity indices and chi-square stats by route-pair for ' + filename + ' data.'
-	cursor.execute('DROP TABLE IF EXISTS results_' + filename)
-	cursor.execute("""
-		CREATE TABLE results_""" + filename + """ (
-			route_id TEXT,
-			route_id2 TEXT,
-			chi2 REAL,
-			p_val REAL,
-			collinear_index REAL);
-		""")
-
-	print 'Created results_' + filename
-	
-	cursor.execute("""
-		INSERT INTO results_""" + filename + """
-		SELECT
-			ci.route_id,
-			ci.route_id2,
-			ch.chi2,
-			ch.p_val,
-			ci.index AS collinear_index
-		FROM
-			collinear_index AS ci,
-			chi2_""" + filename + """ AS ch
-		WHERE
-			ci.route_id = ch.route_id AND
-			ci.route_id2 = ch.route_id2
-		ORDER BY
-			ci.index DESC;
-		""")
-	
-	database.commit()
-
-epsg_code = 32616
+epsg_code = get_SRID('gtfs_stops')
 stop_catchments(epsg_code)
 route_stops(epsg_code)
 route_stop_catchments(epsg_code)
-
 
 for filename in os.listdir(demo_path):
     
@@ -330,5 +356,18 @@ for filename in os.listdir(demo_path):
 		# geoprocessing demographic data
 		stop_demographics(f, inputType)
 		route_demographics(f)
-		chi2_stat(f)
-		results(f)
+
+		# calculate chi-squared stat
+		groups = demographic_fields(f)
+		df = len(groups) - 1
+		chi2_stat(f, df)
+
+# Close the cursor
+cursor.close()
+
+# Close the database connection
+database.close()
+
+print ' '
+print '--Chi-squared statistics and p-values calculated--'
+print ' '

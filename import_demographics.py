@@ -27,7 +27,7 @@ dpp = sys.argv[2] if len(sys.argv) > 2 else 10
 
 # start time
 print ' '
-print '--Starting--'
+print '--Starting ' + sys.argv[0] + '--'
 print ' '
 
 # Establish a Postgres connection
@@ -53,6 +53,22 @@ cursor = database.cursor()
 #   #so, the argument indices in the array need to be offset by 1
 #   ogr2ogr.main(["","-f", "PostgreSQL", filename, path + filename + '.geojson'])
 
+def make_numeric(filename):
+
+	cursor.execute("""
+		ALTER TABLE """ + filename + """
+		ALTER COLUMN am_indian TYPE real USING am_indian::real,
+		ALTER COLUMN asian TYPE real USING asian::real,
+		ALTER COLUMN black TYPE real USING black::real,
+		ALTER COLUMN latino TYPE real USING latino::real,
+		ALTER COLUMN pacific TYPE real USING pacific::real,
+		ALTER COLUMN white TYPE real USING white::real,
+		ALTER COLUMN mixed TYPE real USING mixed::real,
+		ALTER COLUMN other TYPE real USING other::real,
+		ALTER COLUMN total TYPE real USING total::real
+	""")
+
+	database.commit()
 
 def get_utm_code(input_geom):
 
@@ -77,15 +93,16 @@ def get_utm_code(input_geom):
 	print 'UTM EPSG code is: ' + str(epsg_code)
 	return int(epsg_code)
 
+def get_SRID(input_geom):
+
+	cursor.execute('SELECT ST_SRID(the_geom) FROM ' + input_geom + ';')
+	SRID = str(cursor.fetchone()[0])
+	print 'The current layer SRID is: ' + SRID
+	return SRID
 
 def project_geom(input_geom, epsg_code):
 
 	print 'Projecting demographic data to UTM for geoprocessing.'
-	# get original SRID
-	cursor.execute('SELECT ST_SRID(the_geom) FROM ' + input_geom + ';')
-	original_SRID = str(cursor.fetchone()[0])
-	print 'original SRID is: ' + original_SRID
-
 	# get geometry type
 	cursor.execute('SELECT ST_GeometryType(the_geom) FROM ' + input_geom + ';')
 	geom_type = cursor.fetchone()[0].replace('ST_','').upper()
@@ -97,38 +114,38 @@ def project_geom(input_geom, epsg_code):
 	database.commit()
 
 
-# def import_demographics_csv(path, filename, epsg_code):
+def import_demographics_csv(path, filename, epsg_code):
 
-#     filepath = path + filename + '.csv'
+    filepath = path + filename + '.csv'
 
-#     cursor.execute('DROP TABLE IF EXISTS ' + filename)
-#     print 'Dropped ' + filename + ' table.'
+    cursor.execute('DROP TABLE IF EXISTS ' + filename)
+    print 'Dropped ' + filename + ' table.'
 
-#     cursor.execute("""
-#     CREATE TABLE """ + filename + """(
-#         GEOID TEXT,
-#         lon REAL,
-#         lat REAL,
-#         am_indian REAL, 
-#         asian REAL,
-#         black REAL,
-#         latino REAL,
-#         pacific REAL,
-#         white REAL,
-#         mixed REAL,
-#         other REAL,
-#         total REAL);
-#         """)
+    cursor.execute("""
+    CREATE TABLE """ + filename + """_centroids (
+        GEOID TEXT,
+        lon REAL,
+        lat REAL,
+        am_indian REAL, 
+        asian REAL,
+        black REAL,
+        latino REAL,
+        pacific REAL,
+        white REAL,
+        mixed REAL,
+        other REAL,
+        total REAL);
+        """)
 
-#     cursor.execute("COPY " + filename + " FROM '" + filepath + "' CSV HEADER;")
+    cursor.execute("COPY " + filename + " FROM '" + filepath + "' CSV HEADER;")
 
-#     cursor.execute("SELECT AddGeometryColumn('" + filename + "', 'the_geom', " + str(epsg_code) + ", 'POINT', 2);")
+    cursor.execute("SELECT AddGeometryColumn('" + filename + "_centroids', 'the_geom', " + str(epsg_code) + ", 'POINT', 2);")
 
-#     cursor.execute("UPDATE " + filename + " SET the_geom = ST_SetSRID(ST_MakePoint(lon, lat), 4326);")
+    cursor.execute("UPDATE " + filename + "_centroids SET the_geom = ST_SetSRID(ST_MakePoint(lon, lat), 4326);")
 
-#     database.commit()
+    database.commit()
 
-#     print filename + ' centroids imported.'
+    print filename + ' centroids imported.'
 
 
 # def import_geojson(path, filename, epsg_code):
@@ -153,65 +170,65 @@ def demographic_dots(filename, epsg_code, dots):
 		INSERT INTO """ + filename + """_dots
 	 	(demographic, t, the_geom)
 	 	SELECT 
-			'am_indian' as demographic,
-			""" + dots + """ as dpp,
-			ST_GeneratePoints(the_geom, am_indian::integer / """ + dots + """) as the_geom
+			'am_indian' AS demographic,
+			""" + dots + """ AS dpp,
+			ST_GeneratePoints(the_geom, am_indian::integer / """ + dots + """) AS the_geom
 		FROM """ + filename + """ 
 
 		UNION
 
 		SELECT 
-			'asian' as demographic,
-			""" + dots + """ as dpp,
-			ST_GeneratePoints(the_geom, asian::integer / """ + dots + """) as the_geom 
+			'asian' AS demographic,
+			""" + dots + """ AS dpp,
+			ST_GeneratePoints(the_geom, asian::integer / """ + dots + """) AS the_geom 
 		FROM """ + filename + """ 
 
 		UNION
 
 		SELECT 
-			'black' as demographic,
-			""" + dots + """ as dpp,
-			ST_GeneratePoints(the_geom, black::integer / """ + dots + """) as the_geom
+			'black' AS demographic,
+			""" + dots + """ AS dpp,
+			ST_GeneratePoints(the_geom, black::integer / """ + dots + """) AS the_geom
 		FROM """ + filename + """
 
 		UNION
 
 		SELECT 
-			'latino' as demographic,
-			""" + dots + """ as dpp,
-			ST_GeneratePoints(the_geom, latino::integer / """ + dots + """) as the_geom
-		FROM """ + filename + """
-
-		UNION
-		
-		SELECT 
-			'pacific' as demographic,
-			""" + dots + """ as dpp,
-			ST_GeneratePoints(the_geom, pacific::integer / """ + dots + """) as the_geom
+			'latino' AS demographic,
+			""" + dots + """ AS dpp,
+			ST_GeneratePoints(the_geom, latino::integer / """ + dots + """) AS the_geom
 		FROM """ + filename + """
 
 		UNION
 		
 		SELECT 
-			'white' as demographic,
-			""" + dots + """ as dpp,
-			ST_GeneratePoints(the_geom, white::integer / """ + dots + """) as the_geom
+			'pacific' AS demographic,
+			""" + dots + """ AS dpp,
+			ST_GeneratePoints(the_geom, pacific::integer / """ + dots + """) AS the_geom
 		FROM """ + filename + """
 
 		UNION
 		
 		SELECT 
-			'mixed' as demographic,
-			""" + dots + """ as dpp,
-			ST_GeneratePoints(the_geom, mixed::integer / """ + dots + """) as the_geom
+			'white' AS demographic,
+			""" + dots + """ AS dpp,
+			ST_GeneratePoints(the_geom, white::integer / """ + dots + """) AS the_geom
 		FROM """ + filename + """
 
 		UNION
 		
 		SELECT 
-			'other' as demographic,
-			""" + dots + """ as dpp,
-			ST_GeneratePoints(the_geom, other::integer / """ + dots + """) as the_geom
+			'mixed' AS demographic,
+			""" + dots + """ AS dpp,
+			ST_GeneratePoints(the_geom, mixed::integer / """ + dots + """) AS the_geom
+		FROM """ + filename + """
+
+		UNION
+		
+		SELECT 
+			'other' AS demographic,
+			""" + dots + """ AS dpp,
+			ST_GeneratePoints(the_geom, other::integer / """ + dots + """) AS the_geom
 		FROM """ + filename + """;
 	""")
 
@@ -224,6 +241,9 @@ for filename in os.listdir(demo_path):
 		
 		f = os.path.splitext(filename)[0]
 		
+		# set attributes to numeric
+		make_numeric(f)
+
 		# project layer
 		epsg_code = get_utm_code(f)
 		project_geom(f, epsg_code)
@@ -232,3 +252,12 @@ for filename in os.listdir(demo_path):
 		demographic_dots(f, epsg_code, dpp)
 
 
+# Close the cursor
+cursor.close()
+
+# Close the database connection
+database.close()
+
+print ' '
+print '--Demographic data imported--'
+print ' '

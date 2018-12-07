@@ -42,8 +42,9 @@ Currently, the program expects demographic inputs as Polygon GeoJSON files with 
 "white": ... " " ... "White" only
 "mixed": number of residents who identify with two or more races
 "other": number of residents who identify a race not listed above
+"total": total number of residents
 
-#### Income
+#### Class
 
 "GEOID": FIPS code for location
 "15k": number of residents who live in households with annual income less than $15,000
@@ -54,6 +55,19 @@ Currently, the program expects demographic inputs as Polygon GeoJSON files with 
 "100k": ... " " ... $100,000
 "150k": ... " " ... $150,000
 "rich": number of residents who live in households with annual income great than $150,000
+"total": total number of residents
+
+#### Education
+
+"GEOID": FIPS code for location
+"less_hs": number of residents who did not graduate from high school
+"hs": number of residents who graduated from high school
+"some_colle": number of residents who went to college but did not graduate
+"bachelors": number of residents who graduated from college
+"masters": number of residents who earned a masters degree
+"profession": number of residents who earned a professional degree
+"doctoral": number of residents who earned a PhD
+"total": total number of residents at least 25 years old
 
 ## Processing
 

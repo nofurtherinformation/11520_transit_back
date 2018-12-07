@@ -1,13 +1,17 @@
 #!/bin/bash
 # This runs all scripts to analyze collinearity of shapes in GTFS feeds
+city="atlanta"
+dots_per_person=100
 
-gtfs_path="/Users/jonathanleape/Documents/11.520/inputs/atlanta/gtfs/"
-demo_path="/Users/jonathanleape/Documents/11.520/inputs/atlanta/demographics/race/"
+input_path="/Users/jonathanleape/Documents/11.520/shared/"$city"/2_postgis_inputs/"
+gtfs_path=$input_path"gtfs/"
+demo_path=$input_path"demographics/race/"
+echo $gtfs_path
 
-import_gtfs_path="/Users/jonathanleape/Documents/11.520/11520_transit_back/gtfs_SQL_importer/src/"
-process_path="/Users/jonathanleape/Documents/11.520/11520_transit_back/"
+backend_path="/Users/jonathanleape/Documents/11.520/11520_transit_back/"
+import_gtfs_path=$backend_path"gtfs_SQL_importer/src/"
 
-output_path="/Users/jonathanleape/Documents/11.520/outputs/"
+output_path="/Users/jonathanleape/Documents/11.520/shared/"$city"/3_postgis_outputs/"
 
 # Import GTFS
 cd $import_gtfs_path
@@ -22,15 +26,13 @@ cat gtfs_tables.sql \
 | psql gtfs
 # psql gtfs -c "\dt"
 
-cd $process_path
+cd $backend_path
 python collinear_index.py
 
 # Import demographics geojsons
-FILEPATHS=/Users/jonathanleape/Documents/11.520/inputs/demographics/race/*.geojson
-
-t=$(basename "$file1")                        # output is main.one.two.sh
-name=$(echo "$t" | sed -e 's/\.[^.]*$//') 
-
+FILEPATHS=$demo_path"*.geojson"
+t=$(basename "$file1")
+name=$(echo "$t" | sed -e 's/\.[^.]*$//')
 for fp in $FILEPATHS
 do
   file=$(basename "$fp") 
@@ -39,13 +41,27 @@ do
   ogr2ogr -f "PostgreSQL" PG:"dbname=gtfs user=jonathanleape" $fp -nln $table -lco GEOMETRY_NAME="the_geom"
 done
 
-# ogr2ogr -f "PostgreSQL" PG:"dbname=gtfs user=jonathanleape" "/Users/jonathanleape/Documents/11.520/inputs/demographics/atl_race_2016.shp" -skip-failures -nlt PROMOTE_TO_MULTI -nln atl_race_2016_shp
+# # Import demographics shapefiles
+# FILEPATHS=$demo_path
+# t=$(basename "$file1")
+# name=$(echo "$t" | sed -e 's/\.[^.]*$//')
+# for fp in $FILEPATHS
+# do
+#   file=$(basename "$fp") 
+#   table=$(basename "$file" | sed -e 's/\.[^.]*$//') 
+#   echo "Importing $table file..."
+#   ogr2ogr -f "PostgreSQL" PG:"dbname=gtfs user=jonathanleape" $fp -skip-failures -nlt PROMOTE_TO_MULTI -nln $table -lco GEOMETRY_NAME="the_geom"
+# done
+
+
+# ogr2ogr -f "PostgreSQL" PG:"dbname=gtfs user=jonathanleape" $fp -skip-failures -nlt PROMOTE_TO_MULTI -nln $table
 
 # Process Data
-python import_demographics.py $demo_path 50
-python chi2_stat.py $demo_path 'dots' 50
+python import_demographics.py $demo_path $dots_per_person
+python chi2_stat.py $demo_path 'polygons' # ['centroids', 'dots $dots_per_person', 'polygons']
 
-# Export Results
+# # Export Results
+python combine_results.py $demo_path .25 .05 # [$demo_path, min_collinear_index, max_p_val]
 python export_jsons.py $demo_path $output_path
 
 exit;
