@@ -40,6 +40,13 @@ except:
 
 cursor = database.cursor()
 
+def get_SRID(input_geom):
+
+	cursor.execute('SELECT ST_SRID(the_geom) FROM ' + input_geom + ';')
+	SRID = str(cursor.fetchone()[0])
+	print 'The current layer SRID is: ' + SRID
+	return SRID
+
 def results(filename, min_collinear_index, max_p_val):
 
 	print 'Consolidating collinearity indices and chi-square stats by route-pair for ' + filename + ' data.'
@@ -47,9 +54,11 @@ def results(filename, min_collinear_index, max_p_val):
 	cursor.execute("""
 		CREATE TABLE results_""" + filename + """ (
 			route_id TEXT,
+			direction_id INT,
 			route_short_name TEXT,
 			agency_name TEXT,
 			route_id2 TEXT,
+			direction_id2 INT,
 			route_short_name2 TEXT,
 			agency_name2 TEXT,
 			chi2 REAL,
@@ -61,10 +70,12 @@ def results(filename, min_collinear_index, max_p_val):
 		INSERT INTO results_""" + filename + """
 		SELECT
 			ci.route_id,
-			r.route_short_name AS route_short_name,
+			ci.direction_id,
+			COALESCE(r.route_short_name, r.route_long_name) AS route_short_name,
 			a.agency_name AS agency_name,
 			ci.route_id2,
-			r2.route_short_name AS route_short_name2,
+			ci.direction_id2,
+			COALESCE(r2.route_short_name, r2.route_long_name) AS route_short_name2,
 			a2.agency_name AS agency_name2,
 			ch.chi2,
 			ch.p_val,
@@ -78,7 +89,9 @@ def results(filename, min_collinear_index, max_p_val):
 			gtfs_agency AS a2
 		WHERE
 			ci.route_id = ch.route_id AND
+			ci.direction_id = ch.direction_id AND
 			ci.route_id2 = ch.route_id2 AND
+			ci.direction_id2 = ch.direction_id2 AND
 			r.route_id = ci.route_id AND
 			r2.route_id = ci.route_id2 AND
 			r.agency_id = a.agency_id AND
@@ -96,25 +109,50 @@ def routes(filename):
 
     print 'Creating table of routes with significant results when using ' + filename + ' demographic data.'
     cursor.execute('DROP TABLE IF EXISTS routes_' + filename + ';')
-    cursor.execute('CREATE TABLE routes_' + filename + ' (route_id TEXT, agency_name TEXT, route_short_name TEXT);')
+    cursor.execute('CREATE TABLE routes_' + filename + ' (route_id TEXT, direction_id INT, agency_name TEXT, route_short_name TEXT);')
 
     cursor.execute("""
 		INSERT INTO routes_""" + filename + """
-		(route_id, agency_name, route_short_name)
-		SELECT
+		(route_id, direction_id, agency_name, route_short_name)
+		SELECT DISTINCT ON (r.route_id, r.direction_id)
 			r.route_id,
-			a.agency_name,
+			r.direction_id,
+			r.agency_name,
 			COALESCE(r.route_short_name, r.route_long_name) AS route_short_name
 		FROM
-			gtfs_agency AS a,
-			gtfs_routes AS r,
-            results_""" + filename + """ AS res
-		WHERE
-			r.agency_id = a.agency_id AND
-            r.route_id = res.route_id;
+            results_""" + filename + """ AS r;
 		""")    
 
     database.commit()
+
+def route_shapes_sig(filename, epsg_code):
+
+	print 'Filter routes to significant cases when using ' + filename + ' demographic data.'
+	cursor.execute('DROP TABLE IF EXISTS route_shapes_sig_' + filename + ';')
+	cursor.execute('CREATE TABLE route_shapes_sig_' + filename + ' (route_id TEXT, direction_id INT, agency_name TEXT, route_short_name TEXT);')
+	cursor.execute("""
+		SELECT AddGeometryColumn('route_shapes_sig_""" + filename + """', 'the_geom', """ + str(epsg_code) + """, 'GEOMETRY', 2);
+		""")
+	
+	cursor.execute("""
+		INSERT INTO route_shapes_sig_""" + filename + """
+		SELECT DISTINCT
+			res.route_id AS route_id,
+			res.direction_id AS direction_id,
+			res.agency_name AS agency_name,
+			res.route_short_name AS route_short_name,
+			rs.the_geom AS the_geom
+		FROM
+            results_""" + filename + """ AS res,
+			route_shapes AS rs
+		WHERE
+			res.route_id = rs.route_id AND
+			res.direction_id = rs.direction_id;
+		""")
+
+	database.commit()
+
+epsg_code = get_SRID('gtfs_stops')
 
 for filename in os.listdir(demo_path):
     
@@ -122,7 +160,8 @@ for filename in os.listdir(demo_path):
 		
 		f = os.path.splitext(filename)[0]
 		results(f, min_collinear_index, max_p_val)
-        routes(f)
+        # routes(f)
+		route_shapes_sig(f, epsg_code)
 
 # Close the cursor
 cursor.close()

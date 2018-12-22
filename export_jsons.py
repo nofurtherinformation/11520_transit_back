@@ -92,7 +92,8 @@ for filename in os.listdir(demo_path):
         export_json(output_path,'results_' + f)
         export_geojson(output_path, f + '_dots', 'demographic')
         export_json(output_path, 'stop_profiles_' + f)
-        export_json(output_path, 'routes_' + f)
+        # export_json(output_path, 'routes_' + f)
+        export_geojson(output_path, 'route_shapes_sig_' + f, 'route_id')
 
 # Close the cursor
 cursor.close()

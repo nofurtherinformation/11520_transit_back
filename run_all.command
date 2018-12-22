@@ -1,7 +1,7 @@
 #!/bin/bash
 # This runs all scripts to analyze collinearity of shapes in GTFS feeds
 city="atlanta"
-dots_per_person=100
+dots_per_person=1000
 
 input_path="/Users/jonathanleape/Documents/11.520/shared/"$city"/2_postgis_inputs/"
 gtfs_path=$input_path"gtfs/"
@@ -61,7 +61,7 @@ python import_demographics.py $demo_path $dots_per_person
 python chi2_stat.py $demo_path 'polygons' # ['centroids', 'dots $dots_per_person', 'polygons']
 
 # # Export Results
-python combine_results.py $demo_path .25 .05 # [$demo_path, min_collinear_index, max_p_val]
+python combine_results.py $demo_path .25 .1 # [$demo_path, min_collinear_index, max_p_val]
 python export_jsons.py $demo_path $output_path
 
 exit;

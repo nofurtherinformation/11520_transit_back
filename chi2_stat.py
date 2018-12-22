@@ -95,20 +95,21 @@ def route_stops(epsg_code):
 
 	print 'Creating route_stops layer of stop sequences by route.'
 	cursor.execute('DROP TABLE IF EXISTS route_stops')
-	cursor.execute('CREATE TABLE route_stops (route_id TEXT, stop_id TEXT, stop_sequence INT);')
+	cursor.execute('CREATE TABLE route_stops (route_id TEXT, direction_id INT, stop_id TEXT, stop_sequence INT);')
 	cursor.execute("""
 		SELECT AddGeometryColumn('route_stops', 'the_geom', """ + str(epsg_code) + """, 'GEOMETRY', 2);
 		""")
 
 	cursor.execute("""
 		INSERT INTO route_stops
-		SELECT DISTINCT ON (route_id, stop_id)
+		SELECT DISTINCT ON (route_id, direction_id, stop_id)
 			t.route_id,
+			t.direction_id,
 			s.stop_id,
 			st.stop_sequence,
 			s.the_geom
 		FROM
-			(SELECT DISTINCT ON (route_id) route_id, trip_id FROM gtfs_trips) AS t,
+			(SELECT DISTINCT ON (route_id) route_id, direction_id, trip_id FROM gtfs_trips) AS t,
 			gtfs_stops AS s,
 			gtfs_stop_times AS st
 		WHERE
@@ -116,6 +117,7 @@ def route_stops(epsg_code):
 			s.stop_id = st.stop_id
 		ORDER BY
 			route_id,
+			direction_id,
 			stop_id,
 			stop_sequence;
 	""")
@@ -127,7 +129,7 @@ def route_stop_catchments(epsg_code):
 
 	print 'Creating route_stop_catchments layer of stop buffers by route.'
 	cursor.execute('DROP TABLE IF EXISTS route_stop_catchments')
-	cursor.execute('CREATE TABLE route_stop_catchments (route_id TEXT, stop_id TEXT, stop_sequence INT);')
+	cursor.execute('CREATE TABLE route_stop_catchments (route_id TEXT, direction_id INT, stop_id TEXT, stop_sequence INT);')
 	cursor.execute("""
 		SELECT AddGeometryColumn('route_stop_catchments', 'the_geom', """ + str(epsg_code) + """, 'GEOMETRY', 2);
 		""")
@@ -136,6 +138,7 @@ def route_stop_catchments(epsg_code):
 		INSERT INTO route_stop_catchments
 		SELECT
 			rs.route_id,
+			rs.direction_id,
 			rs.stop_id,
 			rs.stop_sequence,
 			sc.the_geom
@@ -265,6 +268,7 @@ def route_demographics(filename):
 	cursor.execute("""
 		CREATE TABLE route_profiles_""" + filename + """ (
 			route_id TEXT, 
+			direction_id INT,
 			am_indian REAL, 
 			asian REAL,
 			black REAL,
@@ -280,6 +284,7 @@ def route_demographics(filename):
 		INSERT INTO route_profiles_""" + filename + """
 		SELECT
 			route_id,
+			direction_id,
 			SUM(stop_profiles_""" + filename + """.am_indian) AS am_indian, 
 			SUM(stop_profiles_""" + filename + """.asian) AS asian,
 			SUM(stop_profiles_""" + filename + """.black) AS black,
@@ -295,7 +300,8 @@ def route_demographics(filename):
 		WHERE
 			route_stops.stop_id = stop_profiles_""" + filename + """.stop_id
 		GROUP BY
-			route_id;
+			route_id,
+			direction_id;
 		""")
 	
 	database.commit()
@@ -307,7 +313,9 @@ def chi2_stat(filename, df):
 	cursor.execute("""
 		CREATE TABLE chi2_""" + filename + """ (
 			route_id TEXT,
+			direction_id INT,
 			route_id2 TEXT,
+			direction_id2 INT,
 			chi2 REAL,
 			p_val REAL);
 		""")
@@ -315,7 +323,9 @@ def chi2_stat(filename, df):
 	cursor.execute("""	
 		SELECT
 			r1.route_id,
+			r1.direction_id,
 			r2.route_id AS route_id2,
+			r2.direction_id AS direction_id2,
 			CASE WHEN r1.total = 0 THEN 0 ELSE 
 			COALESCE((r1.am_indian/r1.total - r2.am_indian/r2.total)^2 / (NULLIF(r1.am_indian,0)/r1.total),0) + 
 			COALESCE((r1.asian/r1.total - r2.asian/r2.total)^2 / (NULLIF(r1.asian,0)/r1.total),0) + 
@@ -336,8 +346,8 @@ def chi2_stat(filename, df):
 		""")
 
 	for row in cursor.fetchall():
-		p_val = 1 - chi2.cdf(row[2], df)
-		cursor.execute('INSERT INTO chi2_' + filename + ' VALUES (%s, %s, %s, %s)', (row[0], row[1], row[2], p_val))
+		p_val = 1 - chi2.cdf(row[4], df)
+		cursor.execute('INSERT INTO chi2_' + filename + ' VALUES (%s, %s, %s, %s, %s, %s)', (row[0], row[1], row[2], row[3], row[4], p_val))
 
 	database.commit()
 
